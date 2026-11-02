@@ -1,0 +1,44 @@
+name: sync-upstream-sayplay
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: sayplay
+
+      - name: Merge upstream Cap main
+        id: merge
+        shell: bash
+        run: |
+          git remote add upstream https://github.com/CapSoftware/Cap.git || true
+          git fetch upstream main
+          if ! git merge --no-edit upstream/main; then
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            git merge --abort || true
+            exit 1
+          fi
+
+      - name: Open issue on merge conflict
+        if: failure() && steps.merge.outputs.conflict == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "SayPlay: upstream merge conflict",
+              body: "Weekly sync from CapSoftware/Cap main into `sayplay` failed. Resolve manually and push.",
+              labels: ["sayplay", "upstream-sync"],
+            });
+
+      - name: Push sayplay branch
+        if: success()
+        run: git push origin sayplay

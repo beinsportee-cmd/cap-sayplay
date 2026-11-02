@@ -1,27 +1,21 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "Cap",
-	"mainBinaryName": "Cap",
-	"identifier": "so.cap.desktop",
+	"productName": "SayPlay Recorder",
+	"mainBinaryName": "SayPlay Recorder",
+	"identifier": "com.sayandplayschool.recorder",
 	"plugins": {
-		"updater": {
-			"endpoints": [
-				"https://cdn.crabnebula.app/update/cap/cap/{{target}}/{{current_version}}"
-			],
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUyOTAzOTdFNzJFQkRFOTMKUldTVDN1dHlmam1RNHFXb1VYTXlrQk1iMFFkcjN0YitqZlA5WnZNY0ZtQ1dvM1dxK211M3VIYUQK"
-		},
 		"deep-link": {
 			"desktop": {
-				"schemes": ["cap-desktop"]
+				"schemes": ["sayplay-recorder"]
 			}
 		}
 	},
 	"bundle": {
 		"active": true,
-		"createUpdaterArtifacts": true,
+		"createUpdaterArtifacts": false,
 		"targets": "all",
 		"category": "Video",
-		"longDescription": "Cap is the open source alternative to Loom. Lightweight, powerful, and cross-platform. Record and share in seconds.",
+		"longDescription": "SayPlay Recorder — school screen recorder (based on Cap, AGPLv3). Studio Mode, separate mic and system audio. One installer for all 64-bit Windows 10/11 PCs.",
 		"externalBin": ["binaries/cap-muxer", "binaries/cap-cli"],
 		"icon": [
 			"icons/32x32.png",
@@ -42,7 +36,7 @@
 		"fileAssociations": [
 			{
 				"ext": ["cap"],
-				"name": "Cap Project",
+				"name": "SayPlay Project",
 				"mimeType": "application/x-cap-project",
 				"role": "Editor"
 			}
@@ -78,7 +72,9 @@
 				"sidebarImage": "packaging/windows/nsis-sidebar.bmp",
 				"installerIcon": "icons/icon.ico",
 				"installerHooks": "packaging/windows/installer-hooks.nsh",
-				"compression": "lzma"
+				"compression": "lzma",
+				"installMode": "both",
+				"languages": ["English", "Russian"]
 			},
 			"webviewInstallMode": {
 				"type": "skip"

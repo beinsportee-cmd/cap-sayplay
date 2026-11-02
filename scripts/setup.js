@@ -221,19 +221,40 @@ async function main() {
 				"Visual Studio C++ build tools installation was not found",
 			);
 
-		const libclangPath = path.join(
-			vcInstallDir.trim(),
-			"VC/Tools/LLVM/x64/bin/libclang.dll",
-		);
-		if (!(await fileExists(libclangPath)))
+		const libclangCandidates = [
+			path.join(
+				vcInstallDir.trim(),
+				"VC/Tools/LLVM/x64/bin/libclang.dll",
+			),
+			path.join(
+				process.env.ProgramFiles || "C:\\Program Files",
+				"LLVM/bin/libclang.dll",
+			),
+		];
+		let libclangPath = "";
+		for (const candidate of libclangCandidates) {
+			if (await fileExists(candidate)) {
+				libclangPath = candidate;
+				break;
+			}
+		}
+		if (!libclangPath)
 			throw new Error(
-				`Visual Studio LLVM libclang was not found at ${libclangPath}`,
+				`libclang.dll was not found. Install Visual Studio component "C++ Clang tools for Windows" or LLVM from https://releases.llvm.org/ (expected one of: ${libclangCandidates.join(", ")})`,
 			);
 
 		cargoConfigContents += `LIBCLANG_PATH = "${libclangPath.replaceAll(
 			"\\",
 			"/",
 		)}"\n`;
+
+		const bindgenArgs = await windowsBindgenClangArgs(vcInstallDir.trim());
+		if (bindgenArgs) {
+			cargoConfigContents += `BINDGEN_EXTRA_CLANG_ARGS = "${bindgenArgs.replaceAll(
+				"\\",
+				"/",
+			)}"\n`;
+		}
 
 		const cmakePath = path.join(
 			vcInstallDir.trim(),
@@ -763,6 +784,55 @@ async function missingFiles(dir, names) {
 }
 
 const MIN_MSVC_VERSION = [17, 12];
+
+/** Standalone LLVM libclang needs MSVC + Windows SDK on the include path for FFmpeg bindgen. */
+async function windowsShortPath(longPath) {
+	const { stdout } = await exec(
+		`for %I in ("${longPath.replaceAll('"', '""')}") do @echo %~sI`,
+		{ shell: "cmd.exe" },
+	);
+	return stdout.trim() || longPath;
+}
+
+async function windowsBindgenClangArgs(vcInstallDir) {
+	const msvcRoot = path.join(vcInstallDir, "VC", "Tools", "MSVC");
+	if (!(await fileExists(msvcRoot))) return null;
+	const versions = (await fs.readdir(msvcRoot))
+		.filter((name) => /^\d/.test(name))
+		.sort();
+	const msvcVersion = versions.at(-1);
+	if (!msvcVersion) return null;
+	const msvcInclude = path.join(msvcRoot, msvcVersion, "include");
+
+	const kitsInclude = path.join(
+		process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+		"Windows Kits",
+		"10",
+		"Include",
+	);
+	if (!(await fileExists(kitsInclude))) return null;
+	const kitVersions = (await fs.readdir(kitsInclude))
+		.filter((name) => /^\d/.test(name))
+		.sort();
+	const kitVersion = kitVersions.at(-1);
+	if (!kitVersion) return null;
+
+	const inc = async (dir) => `-I${await windowsShortPath(dir)}`;
+	const args = [
+		"--target=x86_64-pc-windows-msvc",
+		"-fms-compatibility",
+		"-fms-extensions",
+		"-D_MSC_VER=1942",
+		"-Drestrict=",
+		"-D__attribute__(x)=",
+		"-Dattribute(x)=",
+		await inc(path.join(kitsInclude, kitVersion, "ucrt")),
+		await inc(path.join(kitsInclude, kitVersion, "shared")),
+		await inc(path.join(kitsInclude, kitVersion, "um")),
+		await inc(msvcInclude),
+	];
+	return args.join(" ");
+}
 
 async function ensureMsvcVersion() {
 	const programFilesX86 =

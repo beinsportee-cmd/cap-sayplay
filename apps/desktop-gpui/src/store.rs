@@ -1623,6 +1623,9 @@ impl AuthSnapshot {
     }
 
     pub fn is_upgraded(&self) -> bool {
+        if cfg!(sayplay_build) {
+            return true;
+        }
         self.plan_upgraded || self.plan_manual
     }
 }

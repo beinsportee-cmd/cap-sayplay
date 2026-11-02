@@ -87,6 +87,7 @@ mod screenshot_editor;
 mod screenshot_export;
 mod script_text;
 mod session;
+mod sayplay;
 mod settings_pages;
 mod settings_window;
 mod sign_in;
@@ -391,6 +392,7 @@ fn main() {
         // binding consumes the keystroke before any `on_key_down` listener on
         // the path runs (`gpui/src/window.rs:5280-5296`).
         ui::bind_text_input_keys(cx);
+        crate::sayplay::apply_school_defaults();
         let general_settings = crate::store::GeneralSettings::load();
         crate::i18n::init(general_settings.ui_language.as_deref());
         crate::theme::init(general_settings.theme, cx);
@@ -430,13 +432,13 @@ fn main() {
                     titlebar: None,
                     #[cfg(target_os = "windows")]
                     titlebar: Some(gpui::TitlebarOptions {
-                        title: Some("Cap".into()),
+                        title: Some(crate::sayplay::PRODUCT_NAME.into()),
                         appears_transparent: true,
                         ..Default::default()
                     }),
                     #[cfg(target_os = "linux")]
                     titlebar: Some(gpui::TitlebarOptions {
-                        title: Some("Cap".into()),
+                        title: Some(crate::sayplay::PRODUCT_NAME.into()),
                         ..Default::default()
                     }),
                     #[cfg(target_os = "linux")]

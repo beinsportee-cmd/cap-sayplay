@@ -8,6 +8,8 @@ SetCompressorDictSize 128
 ; the shared FFmpeg DLLs locked and stop the update with a file-in-use error.
 !macro NSIS_HOOK_PREINSTALL
   !insertmacro CheckIfAppIsRunning "cap-gpui.exe" "${PRODUCTNAME}"
+  !insertmacro CheckIfAppIsRunning "SayPlay Recorder.exe" "${PRODUCTNAME}"
+  !insertmacro CheckIfAppIsRunning "Cap.exe" "Cap"
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL

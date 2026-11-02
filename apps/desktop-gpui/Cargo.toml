@@ -300,6 +300,7 @@ hound = "3.5"
 # and tested against the vendored wgpu-hal, not the crates.io release.
 [patch.crates-io]
 wgpu-hal = { path = "../../vendor/wgpu-hal" }
+ffmpeg-sys-next = { path = "../../vendor/ffmpeg-sys-next" }
 
 # Local checkout of the pinned wingleeio/zed rev plus one commit: paint_surface
 # accepts 32BGRA CVPixelBuffers, which the editor preview's zero-copy path

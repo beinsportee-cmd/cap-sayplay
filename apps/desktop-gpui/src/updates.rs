@@ -362,6 +362,11 @@ fn simulate_download(version: Version, cx: &mut App) {
 fn simulate_download(_version: Version, _cx: &mut App) {}
 
 pub(crate) fn schedule_startup_check(cx: &mut App) {
+    #[cfg(sayplay_build)]
+    {
+        let _ = cx;
+        return;
+    }
     let (wake, requests) = flume::bounded(1);
     cx.set_global(UpdateScheduler {
         wake,

@@ -7,6 +7,8 @@ toolchain="${CAP_GPUI_RUST_TOOLCHAIN:-1.95.0}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gpui_dir="$repo_root/apps/desktop-gpui"
 
+export SAYPLAY_BUILD="${SAYPLAY_BUILD:-1}"
+
 case "$profile" in
 	debug)
 		profile_dir="debug"

@@ -26,7 +26,9 @@ export function targetPlatform(target) {
 }
 
 export function mainBinaryName(target) {
-	return targetPlatform(target) === "win32" ? "Cap.exe" : "Cap";
+	return targetPlatform(target) === "win32"
+		? "SayPlay Recorder.exe"
+		: "SayPlay Recorder";
 }
 
 export function gpuiBinaryPath(target, profile = "release") {
