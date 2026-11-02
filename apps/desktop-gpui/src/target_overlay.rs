@@ -1272,7 +1272,7 @@ fn mode_menu_items(current: Mode) -> Vec<crate::ui::MenuItem> {
                 Mode::Instant => tr::main::mode::header::instant(),
                 Mode::Screenshot => tr::main::mode::header::screenshot(),
             };
-            crate::ui::MenuItem::new(label(), mode == current)
+            crate::ui::MenuItem::new(label, mode == current)
         })
         .collect()
 }

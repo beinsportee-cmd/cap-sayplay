@@ -1579,7 +1579,7 @@ pub fn open_mode_select(cx: &mut App) -> bool {
     let main = cx.global::<AppWindows>().main;
     let mode = main
         .update(cx, |view, _window, cx| view.effective_mode(cx))
-        .unwrap_or_else(|| crate::sayplay::default_ui_mode());
+        .unwrap_or_else(|_| crate::sayplay::default_ui_mode());
 
     if let Some(handle) = cx.global::<AppWindows>().mode_select {
         // A live window is reused, re-reading the mode the way a re-shown
