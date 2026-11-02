@@ -149,14 +149,24 @@ impl Step {
         if permissions_only || (self == Self::Permissions && !core_granted) {
             return None;
         }
-        Self::ALL.get(self as usize + 1).copied()
+        let mut next = Self::ALL.get(self as usize + 1).copied()?;
+        #[cfg(sayplay_build)]
+        if next == Self::Instant {
+            next = Self::Studio;
+        }
+        Some(next)
     }
 
     fn previous(self, first: Self) -> Option<Self> {
         if self as usize <= first as usize {
             return None;
         }
-        Self::ALL.get(self as usize - 1).copied()
+        let mut prev = Self::ALL.get(self as usize - 1).copied()?;
+        #[cfg(sayplay_build)]
+        if prev == Self::Instant {
+            prev = Self::Overview;
+        }
+        Some(prev)
     }
 
     fn demo_timing(self) -> Option<(&'static [u64], u64)> {

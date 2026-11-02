@@ -492,11 +492,18 @@ fn mode_submenu(mode: Mode) -> Entry {
         title: tr::tray::select_mode().into(),
         enabled: true,
         icon: None,
-        items: vec![
-            label(Mode::Studio, tr::tray::mode::studio()),
-            label(Mode::Instant, tr::tray::mode::instant()),
-            label(Mode::Screenshot, tr::tray::mode::screenshot()),
-        ],
+        items: crate::sayplay::ui_modes()
+            .iter()
+            .copied()
+            .map(|target| {
+                let text = match target {
+                    Mode::Studio => tr::tray::mode::studio(),
+                    Mode::Instant => tr::tray::mode::instant(),
+                    Mode::Screenshot => tr::tray::mode::screenshot(),
+                };
+                label(target, text)
+            })
+            .collect(),
     }
 }
 

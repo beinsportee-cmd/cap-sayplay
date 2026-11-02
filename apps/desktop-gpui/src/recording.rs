@@ -2238,8 +2238,15 @@ async fn start_internal(
     if matches!(config.target, ScreenCaptureTarget::CameraOnly) && config.camera.is_none() {
         return Err(anyhow!("Camera-only recording requires a selected camera."));
     }
-    if config.mode == RecordingMode::Instant && !crate::store::auth_snapshot().signed_in() {
-        return Err(anyhow!("Please sign in to use instant recording"));
+    if config.mode == RecordingMode::Instant {
+        if !crate::sayplay::instant_recording_enabled() {
+            return Err(anyhow!(
+                "Instant mode is not available in SayPlay Recorder. Use Studio mode."
+            ));
+        }
+        if !crate::store::auth_snapshot().signed_in() {
+            return Err(anyhow!("Please sign in to use instant recording"));
+        }
     }
 
     let project_dir = create_project_dir(&config.target, config.mode)?;

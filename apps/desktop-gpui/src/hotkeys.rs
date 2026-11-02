@@ -853,7 +853,13 @@ fn dispatch(action: HotkeyAction, cx: &mut App) {
     tracing::info!(?action, "global hotkey");
     match action {
         HotkeyAction::StartStudioRecording => start_from_hotkey(Mode::Studio, cx),
-        HotkeyAction::StartInstantRecording => start_from_hotkey(Mode::Instant, cx),
+        HotkeyAction::StartInstantRecording => {
+            if crate::sayplay::instant_recording_enabled() {
+                start_from_hotkey(Mode::Instant, cx);
+            } else {
+                start_from_hotkey(Mode::Studio, cx);
+            }
+        }
         HotkeyAction::StopRecording => {
             RecordingSession::global(cx).update(cx, |session, cx| session.stop(cx));
         }
@@ -864,12 +870,7 @@ fn dispatch(action: HotkeyAction, cx: &mut App) {
             RecordingSession::global(cx).update(cx, |session, cx| session.toggle_pause(cx));
         }
         HotkeyAction::CycleRecordingMode => {
-            // `Studio -> Instant -> Screenshot -> Studio` (`hotkeys.rs:262`).
-            let next = match Mode::from_store() {
-                Mode::Studio => Mode::Instant,
-                Mode::Instant => Mode::Screenshot,
-                Mode::Screenshot => Mode::Studio,
-            };
+            let next = crate::sayplay::cycle_ui_mode(Mode::from_store());
             app_windows::set_recording_mode(next, cx);
         }
         HotkeyAction::OpenRecordingPicker => {

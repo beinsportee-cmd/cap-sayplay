@@ -1254,9 +1254,8 @@ struct OverlayDeviceMenu {
     choices: Vec<OverlayDeviceChoice>,
 }
 
-/// `menuModes` (`target-select-overlay.tsx:2064-2090`): three check items, in
-/// this order, checked on the current mode. Picking one switches the mode and
-/// never starts a recording.
+/// `menuModes` (`target-select-overlay.tsx:2064-2090`): mode check items.
+#[allow(dead_code)]
 const MODE_MENU: [(fn() -> &'static str, Mode); 3] = [
     (tr::main::mode::header::studio, Mode::Studio),
     (tr::main::mode::header::instant, Mode::Instant),
@@ -1264,9 +1263,17 @@ const MODE_MENU: [(fn() -> &'static str, Mode); 3] = [
 ];
 
 fn mode_menu_items(current: Mode) -> Vec<crate::ui::MenuItem> {
-    MODE_MENU
-        .into_iter()
-        .map(|(label, mode)| crate::ui::MenuItem::new(label(), mode == current))
+    crate::sayplay::ui_modes()
+        .iter()
+        .copied()
+        .map(|mode| {
+            let label = match mode {
+                Mode::Studio => tr::main::mode::header::studio(),
+                Mode::Instant => tr::main::mode::header::instant(),
+                Mode::Screenshot => tr::main::mode::header::screenshot(),
+            };
+            crate::ui::MenuItem::new(label(), mode == current)
+        })
         .collect()
 }
 

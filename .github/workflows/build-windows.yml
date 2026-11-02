@@ -98,9 +98,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="$(grep '^version = ' apps/desktop-gpui/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')"
-          tag="v${version}-sayplay.1"
+          tag="v${version}-sayplay.${{ github.run_number }}"
           installer="$(ls apps/desktop-gpui/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe | head -1)"
-          gh release create "$tag" "$installer" \
-            --title "SayPlay Recorder ${version}" \
-            --notes "Windows installer (unsigned). Based on Cap (AGPLv3). Studio Mode, no 5-minute export limit, no auto-update to official Cap." \
-            --draft || gh release upload "$tag" "$installer" --clobber
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$installer" --clobber
+          else
+            gh release create "$tag" "$installer" \
+              --title "SayPlay Recorder ${version}" \
+              --notes "Windows installer (unsigned). Based on Cap (AGPLv3). Studio + Screenshot only; no Instant/cloud." \
+              --draft
+          fi

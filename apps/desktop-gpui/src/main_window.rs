@@ -138,10 +138,11 @@ impl Mode {
     /// `get_current_mode` (`src-tauri/src/tray.rs:355-361`): the stored mode,
     /// falling back to `RecordingMode::default()`, which is Instant.
     pub fn from_store() -> Self {
-        crate::store::recording_mode_slug()
+        let mode = crate::store::recording_mode_slug()
             .as_deref()
             .and_then(Self::from_slug)
-            .unwrap_or(Self::Instant)
+            .unwrap_or_else(crate::sayplay::default_ui_mode);
+        crate::sayplay::coerce_ui_mode(mode)
     }
 
     pub fn icon(self) -> &'static str {
@@ -2035,6 +2036,7 @@ impl MainWindow {
     /// select window all land here, so there is one place a mode change
     /// happens.
     pub fn set_mode(&mut self, mode: Mode, cx: &mut Context<Self>) {
+        let mode = crate::sayplay::coerce_ui_mode(mode);
         self.clear_mode_hover();
         cx.notify();
         if self.mode == mode
@@ -2395,7 +2397,10 @@ impl MainWindow {
                 None => return,
             }
         };
-        if mode == recording::RecordingMode::Instant && !crate::store::auth_snapshot().signed_in() {
+        if mode == recording::RecordingMode::Instant
+            && crate::sayplay::instant_recording_enabled()
+            && !crate::store::auth_snapshot().signed_in()
+        {
             let kind = match &target {
                 ScreenCaptureTarget::Display { .. } => TargetType::Display,
                 ScreenCaptureTarget::Window { .. } => TargetType::Window,
@@ -2944,11 +2949,13 @@ impl Render for MainWindow {
             ui::keyboard_nav::leave(window, cx);
         }
         self.keyboard_nav = ui::keyboard_nav::active(window, cx);
-        let mode_info_focused = [Mode::Instant, Mode::Studio, Mode::Screenshot]
-            .into_iter()
-            .zip(&self.mode_info_focus)
-            .find(|(_, focus)| self.keyboard_nav && focus.is_focused(window))
-            .map(|(mode, _)| mode);
+        let mode_info_focused = crate::sayplay::ui_modes()
+            .iter()
+            .copied()
+            .enumerate()
+            .find_map(|(index, mode)| {
+                (self.keyboard_nav && self.mode_info_focus[index].is_focused(window)).then_some(mode)
+            });
         if mode_info_focused.is_some() && mode_info_focused != self.mode_info_focused {
             self.mode_info_preview = None;
         }
@@ -6139,8 +6146,9 @@ impl MainWindow {
         let detail = crate::onboarding_window::mode_detail(shown);
 
         let cards = div().flex().flex_row().gap(px(6.)).w_full().children(
-            [Mode::Instant, Mode::Studio, Mode::Screenshot]
-                .into_iter()
+            crate::sayplay::ui_modes()
+                .iter()
+                .copied()
                 .enumerate()
                 .map(|(index, mode)| {
                     let selected = mode == effective_mode;
@@ -6723,9 +6731,16 @@ impl MainWindow {
             .p(px(3.))
             .rounded_full()
             .bg(glass_tint(theme, 0.06, 0.09))
-            .child(button(Mode::Instant, "mode-instant", 0))
-            .child(button(Mode::Studio, "mode-studio", 1))
-            .child(button(Mode::Screenshot, "mode-screenshot", 2))
+            .children(crate::sayplay::ui_modes().iter().enumerate().map(
+                |(index, mode)| {
+                    let id = match mode {
+                        Mode::Instant => "mode-instant",
+                        Mode::Studio => "mode-studio",
+                        Mode::Screenshot => "mode-screenshot",
+                    };
+                    button(*mode, id, index)
+                },
+            ))
             // `absolute -left-1.5 -top-2 p-1 rounded-full bg-gray-5`, hanging
             // off the pill's top-left corner.
             .child(

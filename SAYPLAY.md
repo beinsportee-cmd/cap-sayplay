@@ -5,6 +5,7 @@ School build of [Cap](https://github.com/CapSoftware/Cap) (AGPLv3) for long Stud
 ## What is different from official Cap
 
 - **No 5-minute export limit** (`SAYPLAY_BUILD=1` → unlimited local export).
+- **No Instant Mode** (Cap cloud / sign-in); **Studio** + **Screenshot** only.
 - **No auto-update** to official Cap (updater removed; update checks disabled).
 - **No analytics** env vars in CI (telemetry off by default for new installs).
 - **Rebrand**: product name `SayPlay Recorder`, bundle id `com.sayandplayschool.recorder`.
