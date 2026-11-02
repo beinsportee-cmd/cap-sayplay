@@ -5,11 +5,10 @@ on:
   push:
     branches:
       - sayplay
-  workflow_run:
-    workflows:
-      - sync-upstream-sayplay
-    types:
-      - completed
+
+permissions:
+  contents: write
+  actions: read
 
 env:
   SAYPLAY_BUILD: "1"
