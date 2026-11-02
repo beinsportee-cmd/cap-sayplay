@@ -3920,6 +3920,35 @@ impl SettingsWindow {
     }
 
     pub(crate) fn render_license(&self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+        if !crate::sayplay::cloud_features_enabled() {
+            return vec![self
+                .section(
+                    tr::settings::license::title(),
+                    Some("Local Studio recording for Say & Play School. No Cap account or cloud upload required."),
+                    None,
+                    vec![self.card(true).child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .text_size(px(18.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(crate::sayplay::PRODUCT_NAME),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .line_height(px(18.))
+                                    .text_color(self.theme.settings_muted())
+                                    .child("Export to file or clipboard. Unlimited local export length."),
+                            ),
+                    )],
+                )
+                .into_any_element()];
+        }
+
         let theme = self.theme;
         let auth = store::auth_snapshot();
         let pro = auth.is_upgraded();
@@ -4043,7 +4072,7 @@ impl SettingsWindow {
                                         ui::ButtonSize::Sm,
                                     )
                                     .label(tr::settings::license::view_pricing())
-                                    .on_click(|_, _, cx| cx.open_url(crate::auth::PRICING_URL)),
+                                    .on_click(|_, _, cx| crate::sayplay::open_pricing(cx)),
                                 )
                                 .child(
                                     div()
@@ -4576,7 +4605,7 @@ impl SettingsWindow {
                             this.gdrive_wait_for_connection(window, cx);
                         }
                     }
-                    Ok((403, _)) => cx.open_url(crate::auth::PRICING_URL),
+                    Ok((403, _)) => crate::sayplay::open_pricing(cx),
                     Ok(_) => {
                         this.pages.gdrive.error =
                             Some(tr::settings::integrations::gdrive::connect_failed().to_string())
@@ -4897,7 +4926,7 @@ impl SettingsWindow {
                                                 return;
                                             }
                                             if !store::auth_snapshot().plan_upgraded {
-                                                cx.open_url(crate::auth::PRICING_URL);
+                                                crate::sayplay::open_pricing(cx);
                                                 return;
                                             }
                                             match view {

@@ -1,5 +1,7 @@
 //! Say & Play school build: defaults and branding (see SAYPLAY.md at repo root).
 
+use gpui::App;
+
 use crate::main_window::Mode;
 
 #[cfg(sayplay_build)]
@@ -34,6 +36,18 @@ pub fn coerce_ui_mode(mode: Mode) -> Mode {
 
 pub fn instant_recording_enabled() -> bool {
     !cfg!(sayplay_build)
+}
+
+/// Cap cloud sign-in, link export, upload queue, and cap.so upsell flows.
+pub fn cloud_features_enabled() -> bool {
+    !cfg!(sayplay_build)
+}
+
+pub fn open_pricing(cx: &mut App) {
+    if cfg!(sayplay_build) {
+        return;
+    }
+    cx.open_url(crate::auth::PRICING_URL);
 }
 
 pub fn cycle_ui_mode(current: Mode) -> Mode {
@@ -91,6 +105,9 @@ pub fn apply_school_defaults() {
     seed("autoZoomOnClicks", Value::Bool(true));
     seed("updateDownloadPolicy", Value::String("never".into()));
     seed("enableTelemetry", Value::Bool(false));
+    seed("disableAutoOpenLinks", Value::Bool(true));
+
+    crate::store::migrate_sayplay_excluded_window_titles();
 }
 
 #[cfg(not(sayplay_build))]

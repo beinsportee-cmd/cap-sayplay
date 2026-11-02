@@ -3186,6 +3186,9 @@ impl MainWindow {
     }
 
     pub fn show_sign_in_prompt(&mut self, kind: TargetType, cx: &mut Context<Self>) {
+        if !crate::sayplay::cloud_features_enabled() {
+            return;
+        }
         self.clear_mode_hover();
         self.sign_in_prompt = Some(SignInPrompt { kind, error: None });
         cx.notify();
@@ -6532,6 +6535,9 @@ impl MainWindow {
     /// Commercial are a non-interactive span on `--blue-400`. Which one
     /// applies is [`PlanBadge::current`], the license query's resolution.
     fn render_plan_badge(&self) -> impl IntoElement {
+        if !crate::sayplay::cloud_features_enabled() {
+            return div();
+        }
         let theme = self.theme;
 
         let badge = div()
@@ -6554,7 +6560,7 @@ impl MainWindow {
                 .child(tr::main::plan::personal())
                 .hover(|style| style.bg(theme.body_hover_fill(5)))
                 .on_click(|_, _, cx| {
-                    cx.open_url(crate::auth::PRICING_URL);
+                    crate::sayplay::open_pricing(cx);
                 }),
             PlanBadge::Pro | PlanBadge::Commercial => badge
                 .bg(theme.blue_9)

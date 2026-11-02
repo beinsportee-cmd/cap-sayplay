@@ -65,6 +65,14 @@ pub enum ExportDestination {
 impl ExportDestination {
     const ALL: &'static [Self] = &[Self::File, Self::Clipboard, Self::Link];
 
+    fn enabled_destinations() -> &'static [Self] {
+        if crate::sayplay::cloud_features_enabled() {
+            Self::ALL
+        } else {
+            &[Self::File, Self::Clipboard]
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             Self::File => tr::editor::export::destination::file(),
@@ -1133,6 +1141,9 @@ impl EditorWindow {
     }
 
     fn start_link_export(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !crate::sayplay::cloud_features_enabled() {
+            return;
+        }
         let duration = self.total_duration();
         let Some(ui) = self.export.as_mut() else {
             return;
@@ -1143,7 +1154,7 @@ impl EditorWindow {
 
         let upgraded = store::auth_snapshot().is_upgraded();
         if !upgraded && duration >= 300.0 {
-            cx.open_url(crate::auth::PRICING_URL);
+            crate::sayplay::open_pricing(cx);
             return;
         }
 
@@ -1357,7 +1368,7 @@ impl EditorWindow {
                                 cx.notify();
                             });
                             let _ = this.update(cx, |_, cx| {
-                                cx.open_url(crate::auth::PRICING_URL);
+                                crate::sayplay::open_pricing(cx);
                             });
                             platform::alert_dialog(
                                 tr::editor::export::upgrade_title(),
@@ -1892,7 +1903,7 @@ impl EditorWindow {
             ui::SegmentedControl::editor(
                 &theme,
                 "export-destination",
-                ExportDestination::ALL
+                ExportDestination::enabled_destinations()
                     .iter()
                     .map(|dest| {
                         let label = if *dest == ExportDestination::Link && self.sharing.is_some() {
@@ -1910,7 +1921,7 @@ impl EditorWindow {
             .stretch()
             .item_height(px(30.))
             .on_select(cx.listener(|this, index: &usize, window, cx| {
-                let Some(dest) = ui::option_at(ExportDestination::ALL, *index) else {
+                let Some(dest) = ui::option_at(ExportDestination::enabled_destinations(), *index) else {
                     return;
                 };
                 if let Some(ui) = this.export.as_mut() {

@@ -1470,7 +1470,7 @@ pub fn open_onboarding(cx: &mut App) {
             ..Default::default()
         },
         |window, cx| {
-            window.set_window_title("Welcome to Cap");
+            window.set_window_title(OwnWindow::Onboarding.title());
             cx.new(|cx| OnboardingWindow::new(window, cx))
         },
     );
@@ -2834,6 +2834,22 @@ impl OwnWindow {
     ];
 
     pub fn title(self) -> &'static str {
+        #[cfg(sayplay_build)]
+        {
+            return match self {
+                Self::Main => crate::sayplay::PRODUCT_NAME,
+                Self::Settings => "SayPlay Settings",
+                Self::Controls => "SayPlay Recording Controls",
+                Self::Camera => "SayPlay Camera",
+                Self::ModeSelect => "SayPlay Mode Selection",
+                Self::Teleprompter => "SayPlay Teleprompter",
+                Self::TargetSelect => "SayPlay Target Select",
+                Self::Editor => "SayPlay Editor",
+                Self::ScreenshotEditor => "SayPlay Screenshot Editor",
+                Self::Onboarding => "Welcome to SayPlay Recorder",
+            };
+        }
+        #[cfg(not(sayplay_build))]
         match self {
             Self::Main => "Cap",
             Self::Settings => "Cap Settings",

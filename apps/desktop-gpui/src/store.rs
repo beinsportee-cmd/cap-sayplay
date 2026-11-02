@@ -904,6 +904,20 @@ impl WindowExclusion {
 
 /// `DEFAULT_EXCLUDED_WINDOW_TITLES` in `general_settings.rs`, which is what
 /// the page's Reset button asks the backend for.
+#[cfg(sayplay_build)]
+pub const DEFAULT_EXCLUDED_WINDOW_TITLES: &[&str] = &[
+    "SayPlay Recorder",
+    "SayPlay Settings",
+    "SayPlay Recording Controls",
+    "SayPlay Camera",
+    "SayPlay Window Capture Occluder",
+    "SayPlay Capture Area",
+    "SayPlay Mode Selection",
+    "SayPlay Recordings Overlay",
+    "SayPlay Teleprompter",
+];
+
+#[cfg(not(sayplay_build))]
 pub const DEFAULT_EXCLUDED_WINDOW_TITLES: &[&str] = &[
     "Cap",
     "Cap Settings",
@@ -926,6 +940,62 @@ pub fn default_excluded_windows() -> Vec<WindowExclusion> {
         })
         .collect()
 }
+
+/// Rewrites legacy Cap window titles in stored exclusions after rebrand.
+#[cfg(sayplay_build)]
+pub fn migrate_sayplay_excluded_window_titles() {
+    const REPLACEMENTS: &[(&str, &str)] = &[
+        ("Cap", "SayPlay Recorder"),
+        ("Cap Settings", "SayPlay Settings"),
+        ("Cap Recording Controls", "SayPlay Recording Controls"),
+        ("Cap Camera", "SayPlay Camera"),
+        ("Cap Window Capture Occluder", "SayPlay Window Capture Occluder"),
+        ("Cap Capture Area", "SayPlay Capture Area"),
+        ("Cap Mode Selection", "SayPlay Mode Selection"),
+        ("Cap Recordings Overlay", "SayPlay Recordings Overlay"),
+        ("Cap Teleprompter", "SayPlay Teleprompter"),
+    ];
+
+    let general = store_section(GENERAL_SETTINGS);
+    if !general.contains_key("excludedWindows") {
+        set_store_setting(
+            GENERAL_SETTINGS,
+            "excludedWindows",
+            excluded_windows_to_json(&default_excluded_windows()),
+        );
+        return;
+    }
+
+    let Some(items) = general.get("excludedWindows").and_then(Value::as_array) else {
+        return;
+    };
+    let mut windows: Vec<WindowExclusion> = items
+        .iter()
+        .filter_map(WindowExclusion::from_json)
+        .collect();
+    let mut changed = false;
+    for entry in &mut windows {
+        let Some(title) = entry.window_title.as_mut() else {
+            continue;
+        };
+        for (from, to) in REPLACEMENTS {
+            if title == from {
+                *title = (*to).into();
+                changed = true;
+            }
+        }
+    }
+    if changed {
+        set_store_setting(
+            GENERAL_SETTINGS,
+            "excludedWindows",
+            excluded_windows_to_json(&windows),
+        );
+    }
+}
+
+#[cfg(not(sayplay_build))]
+pub fn migrate_sayplay_excluded_window_titles() {}
 
 pub fn excluded_windows_to_json(windows: &[WindowExclusion]) -> Value {
     Value::Array(windows.iter().map(WindowExclusion::to_json).collect())

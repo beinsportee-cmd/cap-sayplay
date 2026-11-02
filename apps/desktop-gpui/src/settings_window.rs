@@ -335,6 +335,14 @@ enum RecordingsTab {
 impl RecordingsTab {
     const ALL: &'static [RecordingsTab] = &[Self::All, Self::Instant, Self::Studio];
 
+    fn visible_tabs() -> &'static [RecordingsTab] {
+        if crate::sayplay::cloud_features_enabled() {
+            Self::ALL
+        } else {
+            &[Self::All, Self::Studio]
+        }
+    }
+
     /// The tab's `id`, which for the two mode tabs is the mode's own
     /// serialized name -- `emptyMessage()` interpolates it directly.
     fn id(self) -> &'static str {
@@ -2060,6 +2068,30 @@ impl SettingsWindow {
 
     fn render_account(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.theme;
+
+        if !crate::sayplay::cloud_features_enabled() {
+            return div()
+                .flex()
+                .flex_col()
+                .pt(px(8.))
+                .px(px(SIDEBAR_PADDING_X))
+                .pb(px(SIDEBAR_PADDING_X))
+                .border_t_1()
+                .border_color(theme.settings_border())
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(theme.settings_muted())
+                        .px(px(4.))
+                        .py(px(2.))
+                        .child(format!(
+                            "{} v{}",
+                            crate::sayplay::PRODUCT_NAME,
+                            env!("CARGO_PKG_VERSION")
+                        )),
+                );
+        }
+
         let (update_label, update_ready) = match crate::updates::status(cx) {
             crate::updates::UpdateStatus::Idle | crate::updates::UpdateStatus::Available { .. } => {
                 (
@@ -2723,7 +2755,7 @@ impl SettingsWindow {
             .flex_wrap()
             .items_center()
             .gap(px(12.))
-            .children(RecordingsTab::ALL.iter().copied().map(|tab| {
+            .children(RecordingsTab::visible_tabs().iter().copied().map(|tab| {
                 let selected = tab == active;
                 div()
                     .id(SharedString::from(tab.id()))
@@ -3392,7 +3424,7 @@ impl SettingsWindow {
         };
         self.has_cap_pro = store::auth_snapshot().is_upgraded();
         if self.instant_resolution_locked(resolution) {
-            cx.open_url(crate::auth::PRICING_URL);
+            crate::sayplay::open_pricing(cx);
             cx.notify();
             return;
         }
@@ -3410,9 +3442,11 @@ impl SettingsWindow {
     }
 
     fn render_recording_quality(&self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
-        vec![
-            self.render_studio_quality(cx).into_any_element(),
-            self.render_instant_quality(cx).into_any_element(),
+        let mut sections = vec![self.render_studio_quality(cx).into_any_element()];
+        if crate::sayplay::cloud_features_enabled() {
+            sections.push(self.render_instant_quality(cx).into_any_element());
+        }
+        sections.push(
             self.section(
                 tr::settings::quality::sharing::title(),
                 None,
@@ -3444,7 +3478,8 @@ impl SettingsWindow {
                 ],
             )
             .into_any_element(),
-        ]
+        );
+        sections
     }
 
     fn effective_instant_resolution(&self) -> u32 {

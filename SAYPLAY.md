@@ -9,7 +9,8 @@ School build of [Cap](https://github.com/CapSoftware/Cap) (AGPLv3) for long Stud
 - **No auto-update** to official Cap (updater removed; update checks disabled).
 - **No analytics** env vars in CI (telemetry off by default for new installs).
 - **Rebrand**: product name `SayPlay Recorder`, bundle id `com.sayandplayschool.recorder`.
-- **Defaults**: Studio Mode, system audio on, 1080p/60 fps quality preset, auto-zoom on clicks.
+- **No Cap cloud**: no sign-in prompts, no link/share export, no upload queue, no cap.so pricing links.
+- **No Cap branding in window titles** (SayPlay names for exclusion from recordings).
 
 Icons still use Cap assets until custom artwork is added. Replace files under `apps/desktop-gpui/icons/` when ready.
 
