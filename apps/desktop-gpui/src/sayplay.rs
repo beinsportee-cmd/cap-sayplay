@@ -1,7 +1,5 @@
 //! Say & Play school build: defaults and branding (see SAYPLAY.md at repo root).
 
-use gpui::{AppContext, Platform};
-
 use crate::main_window::Mode;
 
 #[cfg(sayplay_build)]
@@ -43,12 +41,16 @@ pub fn cloud_features_enabled() -> bool {
     !cfg!(sayplay_build)
 }
 
-pub fn open_pricing(cx: &mut (impl AppContext + Platform)) {
-    if cfg!(sayplay_build) {
-        return;
-    }
-    cx.open_url(crate::auth::PRICING_URL);
+/// No-op on SayPlay builds; opens cap.so/pricing on upstream Cap only.
+macro_rules! open_pricing {
+    ($cx:expr) => {{
+        #[cfg(not(sayplay_build))]
+        {
+            $cx.open_url($crate::auth::PRICING_URL);
+        }
+    }};
 }
+pub(crate) use open_pricing;
 
 pub fn cycle_ui_mode(current: Mode) -> Mode {
     let modes = ui_modes();

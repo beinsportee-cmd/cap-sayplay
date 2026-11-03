@@ -1738,7 +1738,7 @@ impl OnboardingWindow {
                                                 .cursor_pointer()
                                                 .mt(px(8.))
                                                 .on_click(|_, _, cx| {
-                                                    crate::sayplay::open_pricing(cx)
+                                                    crate::sayplay::open_pricing!(cx))
                                                 }),
                                             )
                                         }),
@@ -1751,7 +1751,7 @@ impl OnboardingWindow {
                     copy(tr::onboarding::faq::pricing_link(), 13., theme.blue_10)
                         .id("onboarding-pricing")
                         .cursor_pointer()
-                        .on_click(|_, _, cx| crate::sayplay::open_pricing(cx)),
+                        .on_click(|_, _, cx| crate::sayplay::open_pricing!(cx))),
                 )
             })
             .into_any_element()

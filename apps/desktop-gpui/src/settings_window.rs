@@ -3424,7 +3424,7 @@ impl SettingsWindow {
         };
         self.has_cap_pro = store::auth_snapshot().is_upgraded();
         if self.instant_resolution_locked(resolution) {
-            crate::sayplay::open_pricing(cx);
+            crate::sayplay::open_pricing!(cx));
             cx.notify();
             return;
         }

@@ -6560,7 +6560,7 @@ impl MainWindow {
                 .child(tr::main::plan::personal())
                 .hover(|style| style.bg(theme.body_hover_fill(5)))
                 .on_click(|_, _, cx| {
-                    crate::sayplay::open_pricing(cx);
+                    crate::sayplay::open_pricing!(cx));
                 })
                 .into_any_element(),
             PlanBadge::Pro | PlanBadge::Commercial => badge
