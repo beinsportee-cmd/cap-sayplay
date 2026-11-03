@@ -202,10 +202,17 @@ pub fn build(locales: impl AsRef<Path>) {
     let locales = manifest_dir.join(locales);
     println!("cargo:rerun-if-changed={}", locales.display());
     println!("cargo:rerun-if-env-changed={STRICT_ENV}");
+    println!("cargo:rerun-if-env-changed={SAYPLAY_ENV}");
     let strict = std::env::var(STRICT_ENV).is_ok_and(|value| value == "1");
     let pseudo = std::env::var_os("CARGO_CFG_DEBUG_ASSERTIONS").is_some();
+    let sayplay = std::env::var(SAYPLAY_ENV).is_ok_and(|value| value == "1");
 
-    let catalogs = read_catalogs(&locales).unwrap_or_else(|errors| fail(&errors));
+    let mut catalogs = read_catalogs(&locales).unwrap_or_else(|errors| fail(&errors));
+    if sayplay {
+        for (_, text) in &mut catalogs {
+            *text = rebrand(text);
+        }
+    }
     let borrowed: Vec<(&str, &str)> = catalogs
         .iter()
         .map(|(code, text)| (code.as_str(), text.as_str()))
@@ -220,6 +227,32 @@ pub fn build(locales: impl AsRef<Path>) {
     if let Err(error) = std::fs::write(&path, output.code) {
         panic!("cap-i18n-build: cannot write {}: {error}", path.display());
     }
+}
+
+pub const SAYPLAY_ENV: &str = "SAYPLAY_BUILD";
+const SAYPLAY_NAME: &str = "SayPlay";
+
+/// Swaps the product name for SayPlay builds. Only the whole word `Cap` is
+/// replaced, so `Capture`, `Caption`, `CapSoftware` and `Cap.so` links keep
+/// their spelling.
+pub fn rebrand(text: &str) -> String {
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(text.len());
+    let mut copied = 0;
+    for (index, word) in text.match_indices("Cap") {
+        let after = &text[index + word.len()..];
+        if text[..index].chars().next_back().is_some_and(is_word)
+            || after.chars().next().is_some_and(is_word)
+            || after.starts_with(".so")
+        {
+            continue;
+        }
+        out.push_str(&text[copied..index]);
+        out.push_str(SAYPLAY_NAME);
+        copied = index + word.len();
+    }
+    out.push_str(&text[copied..]);
+    out
 }
 
 fn env_path(name: &str) -> PathBuf {
@@ -1339,6 +1372,32 @@ mod tests {
             .find(|spec| spec.code == code)
             .map(|spec| spec.plural)
             .unwrap()
+    }
+
+    #[test]
+    fn rebrand_replaces_only_the_whole_word() {
+        for (text, expected) in [
+            ("Quit Cap", "Quit SayPlay"),
+            ("Cap v{version}", "SayPlay v{version}"),
+            (
+                "Help us improve Cap's editor.",
+                "Help us improve SayPlay's editor.",
+            ),
+            ("Restart Cap.", "Restart SayPlay."),
+            ("Cap-hosted", "SayPlay-hosted"),
+            ("Capを終了", "SayPlayを終了"),
+            ("退出 Cap", "退出 SayPlay"),
+            ("Capture and Caption", "Capture and Caption"),
+            ("CapSoftware, OneCap, Cap_1", "CapSoftware, OneCap, Cap_1"),
+            (
+                "Download from Cap.so/download.",
+                "Download from Cap.so/download.",
+            ),
+            ("https://cap.so", "https://cap.so"),
+            ("", ""),
+        ] {
+            assert_eq!(rebrand(text), expected, "{text:?}");
+        }
     }
 
     #[test]

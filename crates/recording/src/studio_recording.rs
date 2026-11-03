@@ -3739,13 +3739,22 @@ fn persist_failed_recording(recording_dir: &Path, error: &str) -> anyhow::Result
         .context("persist failed Studio metadata")
 }
 
+/// `SAYPLAY_BUILD=1` at compile time names recordings after SayPlay instead of Cap.
+fn default_pretty_name() -> String {
+    let product = match option_env!("SAYPLAY_BUILD") {
+        Some("1") => "SayPlay",
+        _ => "Cap",
+    };
+    chrono::Local::now()
+        .format(&format!("{product} %Y-%m-%d at %H.%M.%S"))
+        .to_string()
+}
+
 fn persist_final_recording_meta(
     recording_dir: &Path,
     studio_meta: &StudioRecordingMeta,
 ) -> anyhow::Result<RecordingMeta> {
-    use chrono::Local;
-
-    let pretty_name = Local::now().format("Cap %Y-%m-%d at %H.%M.%S").to_string();
+    let pretty_name = default_pretty_name();
     let recording_meta = RecordingMeta {
         platform: Some(Platform::default()),
         project_path: recording_dir.to_path_buf(),
@@ -3795,9 +3804,7 @@ fn write_segment_start_times(segment_dir: &Path, times: &SegmentStartTimes) -> s
 }
 
 fn write_in_progress_meta(recording_dir: &Path) -> anyhow::Result<()> {
-    use chrono::Local;
-
-    let pretty_name = Local::now().format("Cap %Y-%m-%d at %H.%M.%S").to_string();
+    let pretty_name = default_pretty_name();
 
     let meta = RecordingMeta {
         platform: Some(Platform::default()),

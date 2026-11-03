@@ -8,6 +8,13 @@ pub const PRODUCT_NAME: &str = "SayPlay Recorder";
 #[cfg(not(sayplay_build))]
 pub const PRODUCT_NAME: &str = "Cap";
 
+/// Export file name when the recording's name is empty or unusable.
+pub const UNTITLED_RECORDING: &str = if cfg!(sayplay_build) {
+    "SayPlay Recording"
+} else {
+    "Cap Recording"
+};
+
 /// Modes shown in the main window, tray, overlays, and hotkey cycle.
 pub fn ui_modes() -> &'static [Mode] {
     #[cfg(sayplay_build)]
