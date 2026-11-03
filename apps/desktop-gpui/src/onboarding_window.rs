@@ -1738,7 +1738,7 @@ impl OnboardingWindow {
                                                 .cursor_pointer()
                                                 .mt(px(8.))
                                                 .on_click(|_, _, cx| {
-                                                    crate::sayplay::open_pricing!(cx))
+                                                    crate::sayplay::open_pricing!(cx)
                                                 }),
                                             )
                                         }),

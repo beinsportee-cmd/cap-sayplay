@@ -1154,7 +1154,7 @@ impl EditorWindow {
 
         let upgraded = store::auth_snapshot().is_upgraded();
         if !upgraded && duration >= 300.0 {
-            crate::sayplay::open_pricing!(cx));
+            crate::sayplay::open_pricing!(cx);
             return;
         }
 
@@ -1368,7 +1368,7 @@ impl EditorWindow {
                                 cx.notify();
                             });
                             let _ = this.update(cx, |_, cx| {
-                                crate::sayplay::open_pricing!(cx));
+                                crate::sayplay::open_pricing!(cx);
                             });
                             platform::alert_dialog(
                                 tr::editor::export::upgrade_title(),

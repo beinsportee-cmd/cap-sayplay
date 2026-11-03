@@ -42,10 +42,10 @@ pub fn cloud_features_enabled() -> bool {
 }
 
 /// No-op on SayPlay builds; opens cap.so/pricing on upstream Cap only.
+/// A macro because call sites pass `App`, `Context<T>` and window contexts.
 macro_rules! open_pricing {
     ($cx:expr) => {{
-        #[cfg(not(sayplay_build))]
-        {
+        if $crate::sayplay::cloud_features_enabled() {
             $cx.open_url($crate::auth::PRICING_URL);
         }
     }};

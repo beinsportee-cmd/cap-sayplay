@@ -4933,7 +4933,7 @@ impl SettingsWindow {
                                                 return;
                                             }
                                             if !store::auth_snapshot().plan_upgraded {
-                                                crate::sayplay::open_pricing!(cx));
+                                                crate::sayplay::open_pricing!(cx);
                                                 return;
                                             }
                                             match view {

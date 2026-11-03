@@ -1,9 +1,13 @@
 name: sayplay-gpui-compile
 
+# Fast compile check for work-in-progress branches and PRs. Pushes to
+# `sayplay` itself are checked by build-windows-sayplay before it compiles.
 on:
   push:
     branches:
-      - sayplay
+      - "**"
+      - "!sayplay"
+      - "!main"
     paths:
       - "apps/desktop-gpui/**"
       - "scripts/check-sayplay-gpui-compile.sh"
@@ -30,6 +34,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sayplay-gpui-compile-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   SAYPLAY_BUILD: "1"
   RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
@@ -44,6 +52,11 @@ jobs:
         uses: dtolnay/rust-toolchain@1.95.0
         with:
           targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - name: Syntax check cap-gpui (SayPlay)
+        shell: bash
+        run: ./scripts/check-sayplay-gpui-compile.sh --syntax-only x86_64-pc-windows-msvc
 
       - uses: ./.github/actions/setup-rust-cache
         with:

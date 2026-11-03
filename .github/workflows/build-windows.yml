@@ -10,23 +10,37 @@ permissions:
   contents: write
   actions: read
 
+# A newer push to the same branch supersedes an in-flight installer build.
+concurrency:
+  group: build-windows-sayplay-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   SAYPLAY_BUILD: "1"
   RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
 
 jobs:
   build:
-    if: >-
-      github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+
+      - name: Increase pagefile size
+        uses: al-cheb/configure-pagefile-action@a3b6ebd6b634da88790d9c58d4b37a7f4a7b8708
+        with:
+          minimum-size: 16GB
+          maximum-size: 24GB
+          disk-root: "D:"
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@1.95.0
         with:
           targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - name: Syntax check cap-gpui (SayPlay)
+        shell: bash
+        run: ./scripts/check-sayplay-gpui-compile.sh --syntax-only x86_64-pc-windows-msvc
 
       - uses: ./.github/actions/setup-rust-cache
         with:
@@ -83,13 +97,6 @@ jobs:
           CARGO_PROFILE_RELEASE_STRIP: symbols
           SAYPLAY_BUILD: "1"
         run: ./scripts/build-desktop-binaries.sh x86_64-pc-windows-msvc
-
-      - name: Increase pagefile size
-        uses: al-cheb/configure-pagefile-action@a3b6ebd6b634da88790d9c58d4b37a7f4a7b8708
-        with:
-          minimum-size: 16GB
-          maximum-size: 24GB
-          disk-root: "D:"
 
       - name: Build NSIS installer
         shell: bash

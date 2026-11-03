@@ -6,6 +6,11 @@
 #![allow(clippy::redundant_static_lifetimes)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
+// bindings.rs is a single multi-megabyte line, so each suggestion from these
+// lints echoes the whole file into the build log and buries real errors.
+#![allow(unknown_lints)]
+#![allow(unnecessary_transmutes)]
+#![allow(unpredictable_function_pointer_comparisons)]
 
 extern crate libc;
 

@@ -4,6 +4,7 @@ mod diagnostic_build;
 fn main() {
     diagnostic_build::emit();
     println!("cargo:rerun-if-env-changed=SAYPLAY_BUILD");
+    println!("cargo:rustc-check-cfg=cfg(sayplay_build)");
     let sayplay = std::env::var("SAYPLAY_BUILD").is_ok_and(|value| value == "1");
     if sayplay {
         println!("cargo:rustc-cfg=sayplay_build");
