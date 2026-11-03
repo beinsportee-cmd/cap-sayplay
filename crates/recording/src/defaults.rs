@@ -4,7 +4,6 @@ pub const FREE_INSTANT_MODE_MAX_RESOLUTION: u32 = 1280;
 pub const PRO_INSTANT_MODE_MAX_RESOLUTION: u32 = 1920;
 pub const DEFAULT_INSTANT_MODE_MAX_RESOLUTION: u32 = PRO_INSTANT_MODE_MAX_RESOLUTION;
 pub const DEFAULT_STUDIO_MAX_FPS: u32 = 60;
-pub const CAMERA_ACTIVE_STUDIO_MAX_FPS: u32 = 30;
 pub const DEFAULT_INSTANT_MODE_FPS: u32 = 30;
 pub const DEFAULT_CUSTOM_CURSOR_CAPTURE: bool = true;
 pub const DEFAULT_CAPTURE_KEYBOARD_EVENTS: bool = true;
@@ -42,13 +41,10 @@ impl Default for RecordingDefaults {
 }
 
 impl RecordingDefaults {
-    pub fn studio_max_fps(self, camera_active: bool, override_fps: Option<u32>) -> u32 {
-        let max_fps = override_fps.unwrap_or(self.max_fps);
-        if camera_active {
-            max_fps.min(CAMERA_ACTIVE_STUDIO_MAX_FPS)
-        } else {
-            max_fps
-        }
+    /// The user's Max capture framerate, camera or not; only Compatibility
+    /// quality lowers it with a camera (see `studio_recording`).
+    pub fn studio_max_fps(self, _camera_active: bool, override_fps: Option<u32>) -> u32 {
+        override_fps.unwrap_or(self.max_fps)
     }
 
     pub fn apply_to_studio_builder(

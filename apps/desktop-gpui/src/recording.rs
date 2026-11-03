@@ -433,6 +433,7 @@ async fn finalize_studio(
 ) -> anyhow::Result<PathBuf> {
     let started = std::time::Instant::now();
     let project_path = completed.project_path.clone();
+    let cursor_in_video = cap_recording::screen_capture::take_cursor_in_screen_video();
     let needs_remux = matches!(
         completed.meta.status(),
         cap_project::StudioRecordingStatus::NeedsRemux
@@ -464,6 +465,16 @@ async fn finalize_studio(
         ))
         .unwrap_or_default();
         apply_animated_gradient_to_project_config(&project_path, &capture_target, &library);
+        // The video already shows the system cursor; drawing the editor's
+        // cursor too would show two.
+        if cursor_in_video {
+            match hide_editor_cursor(&project_path) {
+                Ok(()) => {
+                    tracing::info!("Screen video contains the system cursor; editor cursor hidden")
+                }
+                Err(error) => tracing::warn!(%error, "Could not hide the editor cursor"),
+            }
+        }
         if crate::store::studio_sound_by_default()
             && let Err(error) = enable_studio_sound(&project_path)
         {
@@ -1739,6 +1750,34 @@ fn enable_studio_sound(project_path: &std::path::Path) -> std::io::Result<()> {
     result
 }
 
+fn hide_editor_cursor(project_path: &std::path::Path) -> std::io::Result<()> {
+    let path = project_path.join("project-config.json");
+    let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+    let object = config.as_object_mut().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Project configuration is not an object",
+        )
+    })?;
+    let cursor = object
+        .entry("cursor")
+        .or_insert_with(|| serde_json::json!({}));
+    let cursor = cursor.as_object_mut().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Cursor configuration is not an object",
+        )
+    })?;
+    cursor.insert("hide".into(), serde_json::Value::Bool(true));
+    let temp = path.with_extension(format!("cursor-{}.tmp", crate::store::new_uuid_v4()));
+    let result = std::fs::write(&temp, serde_json::to_vec_pretty(&config)?)
+        .and_then(|()| std::fs::rename(&temp, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(temp);
+    }
+    result
+}
+
 fn enable_notch_overlay(project_path: &std::path::Path) -> std::io::Result<()> {
     let path = project_path.join("project-config.json");
     let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(&path)?)?;
@@ -2511,6 +2550,7 @@ async fn start_attempt_with_upload(
             == crate::store::WindowCaptureStyle::FocusedWindow;
     let handle = match config.mode {
         RecordingMode::Studio => {
+            cap_recording::screen_capture::reset_cursor_in_screen_video();
             let mut builder = defaults.apply_to_studio_builder(
                 studio_recording::Actor::builder(project_dir.clone(), config.target.clone())
                     .with_system_audio(config.system_audio)
@@ -3933,6 +3973,30 @@ mod tests {
         assert_eq!(written["futureProjectSetting"], true);
         let parsed: cap_project::ProjectConfiguration = serde_json::from_value(written).unwrap();
         assert!(parsed.background.notch.is_some_and(|notch| notch.enabled));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn editor_cursor_is_hidden_without_touching_other_settings() {
+        let dir = temp_project("hide-cursor");
+        let path = dir.join("project-config.json");
+        let mut original =
+            serde_json::to_value(cap_project::ProjectConfiguration::default()).unwrap();
+        original["cursor"]["future"] = 7.into();
+        original["futureProjectSetting"] = true.into();
+        std::fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+
+        hide_editor_cursor(&dir).unwrap();
+
+        let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(written["cursor"]["future"], 7);
+        assert_eq!(written["futureProjectSetting"], true);
+        let parsed: cap_project::ProjectConfiguration = serde_json::from_value(written).unwrap();
+        assert!(parsed.cursor.hide);
+        assert_eq!(
+            parsed.cursor.size,
+            cap_project::ProjectConfiguration::default().cursor.size
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

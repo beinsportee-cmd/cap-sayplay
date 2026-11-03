@@ -15,6 +15,16 @@ mod windows;
 #[cfg(target_os = "windows")]
 pub use windows::*;
 
+/// Only Windows' Desktop Duplication can end up with the cursor in the video
+/// against the settings.
+#[cfg(not(target_os = "windows"))]
+pub fn reset_cursor_in_screen_video() {}
+
+#[cfg(not(target_os = "windows"))]
+pub fn take_cursor_in_screen_video() -> bool {
+    false
+}
+
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]

@@ -579,6 +579,25 @@ fn capture_backend_override() -> Option<CaptureBackend> {
     }
 }
 
+/// Set when a screen capture since the last reset delivered frames with the
+/// system cursor in them although it was asked to leave it out (Desktop
+/// Duplication with a software cursor). One recording runs at a time; its
+/// segments each have their own capturer, so this outlives them.
+static CURSOR_IN_SCREEN_VIDEO: AtomicBool = AtomicBool::new(false);
+
+/// Clears the flag `take_cursor_in_screen_video` reports; call as a
+/// recording starts.
+pub fn reset_cursor_in_screen_video() {
+    CURSOR_IN_SCREEN_VIDEO.store(false, atomic::Ordering::Relaxed);
+}
+
+/// Whether the screen video recorded since `reset_cursor_in_screen_video`
+/// shows the system cursor even though it was meant to be left out, so the
+/// editor's own cursor would be drawn over it. Clears the flag.
+pub fn take_cursor_in_screen_video() -> bool {
+    CURSOR_IN_SCREEN_VIDEO.swap(false, atomic::Ordering::Relaxed)
+}
+
 enum ScreenCapturer {
     Graphics(scap_direct3d::Capturer),
     Duplication(scap_direct3d::DuplicationCapturer),
@@ -595,7 +614,26 @@ impl ScreenCapturer {
     fn stop(&mut self) -> windows::core::Result<()> {
         match self {
             Self::Graphics(capturer) => capturer.stop(),
-            Self::Duplication(capturer) => capturer.stop(),
+            Self::Duplication(capturer) => {
+                let result = capturer.stop();
+                Self::note_cursor_in_image(capturer);
+                result
+            }
+        }
+    }
+
+    fn note_cursor_in_image(capturer: &scap_direct3d::DuplicationCapturer) {
+        if capturer.cursor_in_image() {
+            CURSOR_IN_SCREEN_VIDEO.store(true, atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+impl Drop for ScreenCapturer {
+    fn drop(&mut self) {
+        if let Self::Duplication(capturer) = self {
+            let _ = capturer.stop();
+            Self::note_cursor_in_image(capturer);
         }
     }
 }

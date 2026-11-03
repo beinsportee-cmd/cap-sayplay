@@ -6,9 +6,11 @@
 //! Frames come out as the same [`Frame`] the WGC [`Capturer`](crate::Capturer)
 //! produces, in the requested pixel format, on the caller's device, so nothing
 //! downstream knows which path made them. Desktop Duplication only ever
-//! duplicates a whole output: there is no window capture here, and the system
-//! cursor is never part of the image, so it is drawn in when the settings ask
-//! for it.
+//! duplicates a whole output: there is no window capture here, and a hardware
+//! cursor is not part of the image, so it is drawn in when the settings ask
+//! for it. A software cursor (some drivers, or after some display changes) is
+//! painted into the image by Windows and can't be left out;
+//! [`DuplicationCapturer::cursor_in_image`] reports when that happens.
 
 use std::{
     ffi::c_void,
@@ -120,6 +122,7 @@ pub struct DuplicationCapturer {
     path: DuplicationPath,
     start_tx: Option<mpsc::Sender<()>>,
     stop_flag: Arc<AtomicBool>,
+    cursor_in_image: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -147,6 +150,7 @@ impl DuplicationCapturer {
         // HMONITOR is a pointer, so it travels to the thread as an integer.
         let monitor = monitor.0 as isize;
         let stop_flag = Arc::new(AtomicBool::new(false));
+        let cursor_in_image = Arc::new(AtomicBool::new(false));
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
         let (start_tx, start_rx) = mpsc::channel();
 
@@ -155,12 +159,14 @@ impl DuplicationCapturer {
             .spawn({
                 let settings = settings.clone();
                 let stop_flag = stop_flag.clone();
+                let cursor_in_image = cursor_in_image.clone();
                 move || {
                     run(
                         HMONITOR(monitor as *mut c_void),
                         settings,
                         device,
                         stop_flag,
+                        cursor_in_image,
                         ready_tx,
                         start_rx,
                         callback,
@@ -178,6 +184,7 @@ impl DuplicationCapturer {
                 path,
                 start_tx: Some(start_tx),
                 stop_flag,
+                cursor_in_image,
                 thread: Some(thread),
             }),
             Ok(Err(error)) => {
@@ -197,6 +204,14 @@ impl DuplicationCapturer {
 
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    /// Whether, while the cursor was meant to stay out of the frames,
+    /// Windows painted it into the desktop image (a software cursor), so the
+    /// delivered frames show it anyway. Only detected while the pointer moves
+    /// over the display; once true it stays true.
+    pub fn cursor_in_image(&self) -> bool {
+        self.cursor_in_image.load(Ordering::Relaxed)
     }
 
     pub fn start(&mut self) -> windows::core::Result<()> {
@@ -230,6 +245,7 @@ fn run(
     settings: Settings,
     device: ID3D11Device,
     stop_flag: Arc<AtomicBool>,
+    cursor_in_image: Arc<AtomicBool>,
     ready_tx: mpsc::SyncSender<Result<DuplicationPath, NewDuplicationError>>,
     start_rx: mpsc::Receiver<()>,
     mut callback: impl FnMut(Frame) -> windows::core::Result<()>,
@@ -241,7 +257,7 @@ fn run(
         let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
 
-    let shared = match Shared::new(device, settings.pixel_format) {
+    let shared = match Shared::new(device, settings.pixel_format, cursor_in_image) {
         Ok(shared) => shared,
         Err(error) => {
             let _ = ready_tx.send(Err(error.into()));
@@ -403,10 +419,15 @@ struct Shared {
     pixel_format: PixelFormat,
     staging: Arc<StagingTexturePool>,
     frames: Arc<TrimPool>,
+    cursor_in_image: Arc<AtomicBool>,
 }
 
 impl Shared {
-    fn new(device: ID3D11Device, pixel_format: PixelFormat) -> windows::core::Result<Self> {
+    fn new(
+        device: ID3D11Device,
+        pixel_format: PixelFormat,
+        cursor_in_image: Arc<AtomicBool>,
+    ) -> windows::core::Result<Self> {
         let luid = unsafe {
             device
                 .cast::<IDXGIDevice>()?
@@ -425,6 +446,7 @@ impl Shared {
             frames: Arc::new(TrimPool::with_bind_flags(
                 D3D11_BIND_UNORDERED_ACCESS.0 as u32,
             )),
+            cursor_in_image,
         })
     }
 
@@ -454,6 +476,52 @@ struct Session {
     snapshot: Option<Snapshot>,
     cursor: Option<(usize, POINT)>,
     cursor_failed: bool,
+    /// Watches for a software cursor while the cursor should stay out of
+    /// the frames; `None` once found, or when the cursor is drawn anyway.
+    pointer_probe: Option<PointerProbe>,
+}
+
+/// A hardware pointer moving over the display produces frames carrying
+/// pointer updates; a software one is part of the desktop image and
+/// produces none. Many moves in a row without a single pointer update mean
+/// Windows is painting the pointer into the image.
+#[derive(Default)]
+struct PointerProbe {
+    last_position: Option<POINT>,
+    unreported_moves: u32,
+}
+
+impl PointerProbe {
+    const SOFTWARE_AFTER_MOVES: u32 = 30;
+
+    /// True once the pointer is known to be painted into the image.
+    fn observe(&mut self, info: &DXGI_OUTDUPL_FRAME_INFO, desktop: &RECT) -> bool {
+        if info.LastMouseUpdateTime != 0 {
+            self.unreported_moves = 0;
+            self.last_position = None;
+            return false;
+        }
+        let mut cursor = CURSORINFO {
+            cbSize: std::mem::size_of::<CURSORINFO>() as u32,
+            ..Default::default()
+        };
+        let on_display = unsafe { GetCursorInfo(&mut cursor) }.is_ok()
+            && cursor.flags.0 & CURSOR_SHOWING.0 != 0
+            && (desktop.left..desktop.right).contains(&cursor.ptScreenPos.x)
+            && (desktop.top..desktop.bottom).contains(&cursor.ptScreenPos.y);
+        if !on_display {
+            self.last_position = None;
+            return false;
+        }
+        if self
+            .last_position
+            .is_some_and(|last| last != cursor.ptScreenPos)
+        {
+            self.unreported_moves += 1;
+        }
+        self.last_position = Some(cursor.ptScreenPos);
+        self.unreported_moves >= Self::SOFTWARE_AFTER_MOVES
+    }
 }
 
 /// The duplicated region, copied out so the desktop frame can go back to
@@ -498,15 +566,18 @@ impl Session {
             _ => Conversion::cpu(),
         };
 
+        let draw_cursor = settings.is_cursor_capture_enabled.unwrap_or(true);
         let session = Self {
             device,
             duplication,
             desktop,
             conversion,
-            draw_cursor: settings.is_cursor_capture_enabled.unwrap_or(true),
+            draw_cursor,
             snapshot: None,
             cursor: None,
             cursor_failed: false,
+            pointer_probe: (!draw_cursor && !shared.cursor_in_image.load(Ordering::Relaxed))
+                .then(PointerProbe::default),
         };
         tracing::info!(
             path = ?session.path(),
@@ -545,6 +616,17 @@ impl Session {
             Ok(()) => {}
             Err(error) if error.code() == DXGI_ERROR_WAIT_TIMEOUT => return Ok(None),
             Err(error) => return Err(error),
+        }
+
+        if let Some(probe) = self.pointer_probe.as_mut()
+            && probe.observe(&info, &self.desktop)
+        {
+            self.pointer_probe = None;
+            if !shared.cursor_in_image.swap(true, Ordering::Relaxed) {
+                tracing::warn!(
+                    "scap-direct3d: Windows paints the pointer into the desktop image (software cursor); duplicated frames show it"
+                );
+            }
         }
 
         let wanted = force
