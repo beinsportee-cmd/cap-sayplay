@@ -1819,7 +1819,7 @@ fn apply_default_preset_to_project_config(project_dir: &std::path::Path) -> bool
     else {
         return false;
     };
-    let current = match ProjectConfiguration::load(project_dir) {
+    let current = match cap_project::ProjectConfiguration::load(project_dir) {
         Ok(config) => config,
         Err(error) => {
             tracing::warn!(%error, "no project config to apply the default preset to");
