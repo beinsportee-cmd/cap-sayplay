@@ -1412,66 +1412,34 @@ impl SettingsWindow {
         .detach();
     }
 
-    /// The header's "Open project": pick a shared `.cap` folder, copy it into
-    /// the library off the UI thread ([`crate::import::copy_shared_project`]),
-    /// then open it exactly as the row's Edit button would.
+    /// The header's "Open project": pick a shared `.sayplay` file and open it
+    /// the way a double-click in Explorer does
+    /// ([`crate::share_project::open_project_file`]).
     fn open_shared_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.recordings.opening_project {
             return;
         }
-        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
-            files: false,
-            directories: true,
-            multiple: false,
-            prompt: None,
-        });
         cx.spawn_in(window, async move |this, cx| {
-            let Ok(Ok(Some(paths))) = paths.await else {
+            let Some(source) = crate::share_project::pick_project_file(cx).await else {
                 return;
             };
-            let Some(source) = paths.into_iter().next() else {
-                return;
-            };
-            let started = this.update(cx, |this, cx| {
+            let opened = this.update(cx, |this, cx| {
                 if this.recordings.opening_project {
-                    return false;
+                    return None;
                 }
                 this.recordings.opening_project = true;
                 cx.notify();
-                true
+                Some(crate::share_project::open_project_file(source, cx))
             });
-            if !matches!(started, Ok(true)) {
+            let Ok(Some(opened)) = opened else {
                 return;
-            }
-            let result = cx
-                .background_executor()
-                .spawn(async move { crate::import::copy_shared_project(&source) })
-                .await;
-            match result {
-                Ok(project) => {
-                    this.update_in(cx, |this, window, cx| {
-                        this.recordings.opening_project = false;
-                        cx.notify();
-                        // Deferred: it updates this window's view.
-                        cx.defer(|cx| crate::app_windows::refresh_library_after_delete(cx));
-                        this.open_editor_confirmed(project.path, project.failed, window, cx);
-                    })
-                    .ok();
-                }
-                Err(message) => {
-                    tracing::warn!(%message, "could not open a shared project");
-                    this.update(cx, |this, cx| {
-                        this.recordings.opening_project = false;
-                        cx.notify();
-                    })
-                    .ok();
-                    // Outside the update: the modal runs its own message loop.
-                    crate::platform::alert_dialog(
-                        tr::settings::recordings::open_project_error_title(),
-                        &message,
-                    );
-                }
-            }
+            };
+            opened.await;
+            this.update(cx, |this, cx| {
+                this.recordings.opening_project = false;
+                cx.notify();
+            })
+            .ok();
         })
         .detach();
     }

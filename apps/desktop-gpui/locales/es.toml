@@ -298,7 +298,7 @@ open_project_copy_failed = "No se pudo copiar el proyecto en tu carpeta de graba
 open_project_error_title = "No se pudo abrir el proyecto"
 open_project_in_progress = "Este proyecto todavía se está grabando. Inténtalo de nuevo cuando termine la grabación."
 open_project_instant = "Las grabaciones en modo Instant no se pueden abrir en el editor."
-open_project_invalid = "Esta carpeta no es un proyecto de Cap. Elige la carpeta .cap del proyecto."
+open_project_invalid = "Este archivo no es un proyecto de Cap. Elige un archivo .sayplay."
 opening_project = "Abriendo proyecto…"
 retry_upload = "Reintentar la subida"
 show_all = "Mostrar todo"
@@ -3026,6 +3026,15 @@ worker_failed = "El proceso de subida ha fallado; la grabación local se conserv
 empty = "La grabación guardada está vacía"
 no_resumable_state = "Esta grabación no tiene una subida que se pueda reanudar"
 verification_failed = "La verificación de la grabación ha fallado: {status}"
+
+[project_file]
+filter = "Proyecto de Cap"
+share = "Compartir proyecto"
+share_failed = "No se pudo guardar el archivo del proyecto: {error}"
+share_failed_title = "No se pudo compartir el proyecto"
+share_tooltip = "Guarda este proyecto como un solo archivo para enviarlo a un compañero. Lo abre con doble clic y puede seguir editándolo."
+shared = "Se guardó {file}. Envía este archivo a un compañero: lo abre con doble clic."
+sharing = "Guardando…"
 
 [message.cli]
 binary_missing = "No se encontró la CLI incluida en {path}"

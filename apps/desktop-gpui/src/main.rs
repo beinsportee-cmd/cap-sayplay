@@ -78,6 +78,7 @@ mod picker_probe;
 mod picker_ui_benchmark;
 mod platform;
 mod presets;
+mod project_file;
 mod project_save;
 mod recording;
 mod screenshot;
@@ -90,6 +91,7 @@ mod session;
 mod sayplay;
 mod settings_pages;
 mod settings_window;
+mod share_project;
 mod sign_in;
 mod single_instance;
 #[cfg(debug_assertions)]

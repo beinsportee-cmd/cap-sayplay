@@ -298,7 +298,7 @@ open_project_copy_failed = "Impossible de copier le projet dans votre dossier d'
 open_project_error_title = "Impossible d'ouvrir le projet"
 open_project_in_progress = "Ce projet est encore en cours d'enregistrement. Réessayez une fois l'enregistrement terminé."
 open_project_instant = "Les enregistrements en mode Instant ne peuvent pas être ouverts dans l'éditeur."
-open_project_invalid = "Ce dossier n'est pas un projet Cap. Choisissez le dossier .cap du projet."
+open_project_invalid = "Ce fichier n'est pas un projet Cap. Choisissez un fichier .sayplay."
 opening_project = "Ouverture du projet…"
 retry_upload = "Relancer la mise en ligne"
 show_all = "Tout afficher"
@@ -3026,6 +3026,15 @@ worker_failed = "Le processus d'envoi a échoué ; l'enregistrement local est co
 empty = "L'enregistrement sauvegardé est vide"
 no_resumable_state = "Cet enregistrement n'a pas d'envoi pouvant reprendre"
 verification_failed = "La vérification de l'enregistrement a échoué : {status}"
+
+[project_file]
+filter = "Projet Cap"
+share = "Partager le projet"
+share_failed = "Impossible d'enregistrer le fichier du projet : {error}"
+share_failed_title = "Impossible de partager le projet"
+share_tooltip = "Enregistre ce projet dans un seul fichier à envoyer à un collègue. Il l'ouvre d'un double-clic et peut continuer à le modifier."
+shared = "{file} a été enregistré. Envoyez ce fichier à un collègue : il l'ouvre d'un double-clic."
+sharing = "Enregistrement…"
 
 [message.cli]
 binary_missing = "CLI intégrée introuvable dans {path}"

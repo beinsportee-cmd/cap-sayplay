@@ -298,7 +298,7 @@ open_project_copy_failed = "Das Projekt konnte nicht in Ihren Aufnahmeordner kop
 open_project_error_title = "Projekt konnte nicht geöffnet werden"
 open_project_in_progress = "Dieses Projekt wird noch aufgenommen. Versuchen Sie es erneut, sobald die Aufnahme beendet ist."
 open_project_instant = "Aufnahmen im Instant-Modus können nicht im Editor geöffnet werden."
-open_project_invalid = "Dieser Ordner ist kein Cap-Projekt. Wählen Sie den .cap-Ordner des Projekts aus."
+open_project_invalid = "Diese Datei ist kein Cap-Projekt. Wählen Sie eine .sayplay-Datei aus."
 opening_project = "Projekt wird geöffnet…"
 retry_upload = "Hochladen wiederholen"
 show_all = "Alle anzeigen"
@@ -3026,6 +3026,15 @@ worker_failed = "Der Upload-Vorgang ist fehlgeschlagen; die lokale Aufnahme blei
 empty = "Die gespeicherte Aufnahme ist leer"
 no_resumable_state = "Für diese Aufnahme gibt es keinen fortsetzbaren Upload"
 verification_failed = "Die Prüfung der Aufnahme ist fehlgeschlagen: {status}"
+
+[project_file]
+filter = "Cap-Projekt"
+share = "Projekt teilen"
+share_failed = "Die Projektdatei konnte nicht gespeichert werden: {error}"
+share_failed_title = "Projekt konnte nicht geteilt werden"
+share_tooltip = "Speichert dieses Projekt als eine einzige Datei für Kolleginnen und Kollegen. Ein Doppelklick öffnet sie, und das Projekt lässt sich weiterbearbeiten."
+shared = "{file} wurde gespeichert. Senden Sie diese Datei an eine Kollegin oder einen Kollegen: Ein Doppelklick öffnet sie."
+sharing = "Wird gespeichert…"
 
 [message.cli]
 binary_missing = "Mitgelieferte CLI unter {path} nicht gefunden"

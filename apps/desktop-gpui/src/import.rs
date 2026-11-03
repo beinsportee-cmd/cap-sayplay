@@ -82,7 +82,7 @@ fn generate_project_name(source_path: &Path, fallback: &str) -> String {
 }
 
 /// `import.rs:125-132`.
-fn sanitize_filename(name: &str) -> String {
+pub(crate) fn sanitize_filename(name: &str) -> String {
     name.chars()
         .map(|c| match c {
             '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
@@ -92,7 +92,7 @@ fn sanitize_filename(name: &str) -> String {
 }
 
 /// The `(1)`-suffix uniquing loop from `start_video_import` (`import.rs:1370-1376`).
-fn unique_project_path(recordings_dir: &Path, sanitized_name: &str) -> PathBuf {
+pub(crate) fn unique_project_path(recordings_dir: &Path, sanitized_name: &str) -> PathBuf {
     let mut project_path = recordings_dir.join(format!("{sanitized_name}.cap"));
     let mut counter = 1;
     while project_path.exists() {
@@ -262,7 +262,7 @@ fn apply_progress(update: ImportProgress, cx: &mut App) {
 /// The refresh seam a finished import rides: the Recents carousel, the
 /// settings Recordings page and the tray's Previous submenu
 /// (`refresh_library_after_delete`), and the open library panel.
-fn refresh_libraries(cx: &mut App) {
+pub(crate) fn refresh_libraries(cx: &mut App) {
     if !cx.has_global::<crate::app_windows::AppWindows>() {
         return;
     }
@@ -449,124 +449,6 @@ fn show_error_dialog(description: String) {
         .set_level(rfd::MessageLevel::Error)
         .set_buttons(rfd::MessageButtons::Ok)
         .show();
-}
-
-// ---------------------------------------------------------------------------
-// Opening a shared project
-// ---------------------------------------------------------------------------
-
-/// A studio project ready for the editor; `failed` asks the caller to confirm
-/// first, the way the Recordings page's Edit button does.
-pub struct SharedProject {
-    pub path: PathBuf,
-    pub failed: bool,
-}
-
-/// "Open project" on the Recordings page: a `.cap` folder someone shared on a
-/// USB stick or network drive. A project already inside a recordings folder
-/// opens in place; anything else is copied into the active recordings folder
-/// first, so it joins the library, survives the stick being pulled, and the
-/// shared original is never edited. Blocking; run it off the UI thread.
-pub fn copy_shared_project(source: &Path) -> Result<SharedProject, String> {
-    let not_a_project = || tr::settings::recordings::open_project_invalid().to_string();
-    if !source.is_dir() {
-        return Err(not_a_project());
-    }
-    let meta = RecordingMeta::load_for_project(source).map_err(|_| not_a_project())?;
-    let RecordingMetaInner::Studio(studio) = &meta.inner else {
-        return Err(tr::settings::recordings::open_project_instant().to_string());
-    };
-    let failed = match studio.status() {
-        StudioRecordingStatus::InProgress => {
-            return Err(tr::settings::recordings::open_project_in_progress().to_string());
-        }
-        StudioRecordingStatus::Failed { .. } => true,
-        StudioRecordingStatus::Complete | StudioRecordingStatus::NeedsRemux => false,
-    };
-
-    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let source_key = canonical(source);
-    if crate::library::known_recordings_dirs()
-        .iter()
-        .any(|dir| source_key.starts_with(canonical(dir)))
-    {
-        return Ok(SharedProject {
-            path: source.to_path_buf(),
-            failed,
-        });
-    }
-
-    let copy_failed =
-        |error: std::io::Error| tr::settings::recordings::open_project_copy_failed(error);
-    let recordings_dir = crate::recording::recordings_dir();
-    std::fs::create_dir_all(&recordings_dir).map_err(copy_failed)?;
-    // Copying a folder into itself would never finish.
-    if canonical(&recordings_dir).starts_with(&source_key) {
-        return Err(not_a_project());
-    }
-
-    let folder = source
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default();
-    let name = [
-        folder.strip_suffix(".cap").unwrap_or(folder),
-        meta.pretty_name.as_str(),
-    ]
-    .into_iter()
-    .map(sanitize_filename)
-    .find(|name| !name.trim().is_empty())
-    .unwrap_or_else(|| crate::sayplay::UNTITLED_RECORDING.to_string());
-    let dest = unique_project_path(&recordings_dir, &name);
-    std::fs::create_dir(&dest).map_err(copy_failed)?;
-    if let Err(error) = copy_project_contents(source, &dest) {
-        if let Err(cleanup) = std::fs::remove_dir_all(&dest) {
-            tracing::warn!(%cleanup, path = %dest.display(), "could not remove a partial project copy");
-        }
-        return Err(copy_failed(error));
-    }
-    tracing::info!(source = %source.display(), dest = %dest.display(), "copied a shared project");
-    Ok(SharedProject { path: dest, failed })
-}
-
-/// The metadata file goes last: the library lists any folder whose
-/// `recording-meta.json` parses, so a half-finished copy stays invisible.
-fn copy_project_contents(source: &Path, dest: &Path) -> std::io::Result<()> {
-    const META_FILE: &str = "recording-meta.json";
-    copy_dir_contents(source, dest, Some(META_FILE))?;
-    copy_project_file(&source.join(META_FILE), &dest.join(META_FILE))
-}
-
-/// Symlinks are skipped rather than followed: a project never contains one,
-/// and following one could copy far more than the project.
-fn copy_dir_contents(source: &Path, dest: &Path, skip: Option<&str>) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(source)? {
-        let entry = entry?;
-        let kind = entry.file_type()?;
-        let target = dest.join(entry.file_name());
-        if kind.is_dir() {
-            std::fs::create_dir(&target)?;
-            copy_dir_contents(&entry.path(), &target, None)?;
-        } else if kind.is_file() && skip.is_none_or(|skip| entry.file_name() != skip) {
-            copy_project_file(&entry.path(), &target)?;
-        }
-    }
-    Ok(())
-}
-
-/// Files from read-only media keep their read-only flag through `fs::copy`,
-/// which would stop the editor from saving into the copy.
-fn copy_project_file(source: &Path, dest: &Path) -> std::io::Result<()> {
-    std::fs::copy(source, dest)?;
-    #[cfg(windows)]
-    {
-        let mut permissions = std::fs::metadata(dest)?.permissions();
-        if permissions.readonly() {
-            permissions.set_readonly(false);
-            std::fs::set_permissions(dest, permissions)?;
-        }
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

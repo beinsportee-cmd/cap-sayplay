@@ -298,7 +298,7 @@ open_project_copy_failed = "无法将项目复制到你的录制文件夹：{err
 open_project_error_title = "无法打开项目"
 open_project_in_progress = "此项目仍在录制中。请在录制结束后重试。"
 open_project_instant = "Instant 模式的录制无法在编辑器中打开。"
-open_project_invalid = "此文件夹不是 Cap 项目。请选择项目的 .cap 文件夹。"
+open_project_invalid = "此文件不是 Cap 项目。请选择一个 .sayplay 文件。"
 opening_project = "正在打开项目…"
 retry_upload = "重新上传"
 show_all = "全部显示"
@@ -3026,6 +3026,15 @@ worker_failed = "上传进程失败；本地录制已保留"
 empty = "已保存的录制为空"
 no_resumable_state = "此录制没有可继续的上传状态"
 verification_failed = "录制验证失败：{status}"
+
+[project_file]
+filter = "Cap 项目"
+share = "共享项目"
+share_failed = "无法保存项目文件：{error}"
+share_failed_title = "无法共享项目"
+share_tooltip = "将此项目保存为一个文件，方便发送给同事。对方双击即可打开并继续编辑。"
+shared = "已保存 {file}。将此文件发送给同事：对方双击即可打开。"
+sharing = "正在保存…"
 
 [message.cli]
 binary_missing = "未在 {path} 找到内置的 CLI 程序"

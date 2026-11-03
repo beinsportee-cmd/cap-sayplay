@@ -1490,6 +1490,8 @@ pub struct EditorWindow {
     /// The debounced `project-config.json` write, and the task driving it.
     pending_save: Rc<RefCell<PendingProjectSave>>,
     save_task: Option<gpui::Task<()>>,
+    /// "Share project" is writing the `.sayplay` file.
+    sharing_project: bool,
 
     // -- Text fields (E5.5) ---------------------------------------------------
     /// `NameEditor` (`Header.tsx:276-330`). The value lives in
@@ -2059,6 +2061,7 @@ impl EditorWindow {
                 .ok()
                 .and_then(|meta| meta.sharing),
             pending_save: Rc::new(RefCell::new(PendingProjectSave::new(project_path.clone()))),
+            sharing_project: false,
             project_path,
             state: LoadState::Loading,
             preparing_consumer: None,
@@ -7142,6 +7145,76 @@ impl EditorWindow {
         crate::library::reveal_path(&self.project_path, cx);
     }
 
+    /// "Share project": saves the whole project as one `.sayplay` file and
+    /// shows it in Explorer, ready to attach to an email or a chat.
+    fn share_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.sharing_project {
+            return;
+        }
+        self.set_selection(None, cx);
+        let ready = match self.busy_reason() {
+            Some(reason) => Err(reason.to_string()),
+            None => self.flush_pending_saves(cx),
+        };
+        if let Err(message) = ready {
+            // Outside the update: the modal runs its own message loop.
+            cx.spawn(async move |_, _| {
+                crate::platform::alert_dialog(tr::project_file::share_failed_title(), &message);
+            })
+            .detach();
+            return;
+        }
+        let project = self.project_path.clone();
+        let pretty_name = self
+            .summary()
+            .map(|summary| summary.pretty_name.clone())
+            .unwrap_or_else(|| crate::sayplay::UNTITLED_RECORDING.to_string());
+        cx.spawn_in(window, async move |this, cx| {
+            let Some(dest) = crate::share_project::choose_destination(&pretty_name, cx).await
+            else {
+                return;
+            };
+            let started = this.update(cx, |this, cx| {
+                if this.sharing_project {
+                    return false;
+                }
+                this.sharing_project = true;
+                cx.notify();
+                true
+            });
+            if !matches!(started, Ok(true)) {
+                return;
+            }
+            let written = dest.clone();
+            let result = cx
+                .background_executor()
+                .spawn(async move { crate::share_project::write_project_file(&project, &written) })
+                .await;
+            this.update_in(cx, |this, window, cx| {
+                this.sharing_project = false;
+                if result.is_ok() {
+                    let file = dest
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    this.show_notice(tr::project_file::shared(file), window, cx);
+                }
+                cx.notify();
+            })
+            .ok();
+            match result {
+                Ok(()) => {
+                    let app: &gpui::AsyncApp = cx;
+                    app.update(|cx| crate::library::reveal_path(&dest, cx));
+                }
+                Err(message) => {
+                    crate::platform::alert_dialog(tr::project_file::share_failed_title(), &message);
+                }
+            }
+        })
+        .detach();
+    }
+
     fn delete_recording(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.set_selection(None, cx);
         let path = self.project_path.clone();
@@ -10039,6 +10112,22 @@ impl EditorWindow {
                             compact,
                         )
                     }))
+                    .child(
+                        ui::EditorButton::plain(&theme, "share-project")
+                            .left_icon("icons/upload-arrow.svg")
+                            .when(!compact, |button| {
+                                button.label(if self.sharing_project {
+                                    tr::project_file::sharing()
+                                } else {
+                                    tr::project_file::share()
+                                })
+                            })
+                            .tooltip(&theme, tr::project_file::share_tooltip())
+                            .disabled(!self.project_ready() || self.sharing_project)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.share_project(window, cx);
+                            })),
+                    )
                     .child(div().w(px(6.)).flex_none())
                     .when(self.sharing.is_some(), |group| {
                         group.child(self.render_reupload_button(cx))

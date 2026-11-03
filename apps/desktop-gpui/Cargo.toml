@@ -137,6 +137,9 @@ serde = { version = "1", features = ["derive"] }
 sanitize-filename = "0.6.0"
 # Scratch folder for the separate-audio export passes; already in the tree via cap-export.
 tempfile = "3"
+# `.sayplay` project files (`src/project_file.rs`). Stored entries only: the
+# videos inside are already compressed.
+zip = { version = "9.3", default-features = false }
 semver = "1"
 base64 = "0.22"
 minisign-verify = "0.2.4"

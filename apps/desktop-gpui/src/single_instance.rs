@@ -23,6 +23,9 @@ enum ForwardedRequest {
     DeepLink(String),
     #[cfg(any(windows, target_os = "macos"))]
     Reopen,
+    /// A `.sayplay` file double-clicked while the app runs.
+    #[cfg(windows)]
+    ProjectFile(PathBuf),
 }
 
 #[cfg(any(windows, target_os = "macos"))]
@@ -1122,6 +1125,8 @@ fn start_deep_link_forwarding(path: &Path) -> std::io::Result<()> {
                         let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(2)));
                         match read_forwarded_request(&mut stream, endpoint.secret) {
                             Ok(ForwardedRequest::DeepLink(url)) => crate::deeplink::submit_deep_link(&url),
+                            #[cfg(windows)]
+                            Ok(ForwardedRequest::ProjectFile(path)) => crate::deeplink::submit_project_file(path),
                             Ok(ForwardedRequest::Reopen) => {
                                 let result = stream.set_write_timeout(Some(std::time::Duration::from_secs(2)))
                                     .and_then(|()| acknowledge_reopen(&mut stream, crate::deeplink::submit_reopen));
@@ -1185,7 +1190,14 @@ fn forward_windows_deep_links(path: &Path, pid: u32) -> bool {
 
     let urls = std::env::args()
         .skip(1)
-        .filter(|argument| is_forwardable_deep_link(argument))
+        .filter_map(|argument| {
+            if is_forwardable_deep_link(&argument) {
+                Some(argument)
+            } else {
+                crate::project_file::project_file_argument(&argument)
+                    .and_then(|path| path.to_str().map(str::to_owned))
+            }
+        })
         .collect::<Vec<_>>();
     if urls.is_empty() {
         return false;
@@ -1318,6 +1330,10 @@ fn read_forwarded_request(
     let url = String::from_utf8(bytes).map_err(|error| {
         std::io::Error::new(std::io::ErrorKind::InvalidData, error.utf8_error())
     })?;
+    #[cfg(windows)]
+    if let Some(path) = crate::project_file::project_file_argument(&url) {
+        return Ok(ForwardedRequest::ProjectFile(path));
+    }
     if !is_forwardable_deep_link(&url) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -1704,6 +1720,8 @@ mod tests {
             ForwardedRequest::DeepLink(url) => url,
             #[cfg(any(windows, target_os = "macos"))]
             ForwardedRequest::Reopen => panic!("A project action must remain a deep link"),
+            #[cfg(windows)]
+            ForwardedRequest::ProjectFile(_) => panic!("A project action must remain a deep link"),
         };
         let authenticated = reqwest::Url::parse(&authenticated).unwrap();
         assert!(matches!(

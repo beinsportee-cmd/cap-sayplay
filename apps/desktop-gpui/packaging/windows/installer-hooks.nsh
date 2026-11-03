@@ -16,4 +16,10 @@ SetCompressorDictSize 128
   Delete "$INSTDIR\cap-gpui.exe"
   Delete "$INSTDIR\cap-exporter.exe"
   RMDir /r "$INSTDIR\assets\rive"
+
+  ; The template's file association leaves the program path unquoted, and it
+  ; has spaces. Quote it so a double-clicked .sayplay file reaches the app as
+  ; one argument. Uninstall deletes this key with the rest of the class.
+  WriteRegStr SHCTX "Software\Classes\SayPlayRecorder.ProjectFile\shell\open\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+  !insertmacro UPDATEFILEASSOC
 !macroend

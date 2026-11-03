@@ -39,6 +39,13 @@
 				"name": "SayPlay Project",
 				"mimeType": "application/x-cap-project",
 				"role": "Editor"
+			},
+			{
+				"ext": ["sayplay"],
+				"name": "SayPlayRecorder.ProjectFile",
+				"description": "SayPlay project",
+				"mimeType": "application/x-sayplay-project",
+				"role": "Editor"
 			}
 		],
 		"macOS": {

@@ -298,7 +298,7 @@ open_project_copy_failed = "プロジェクトを録画フォルダにコピー�
 open_project_error_title = "プロジェクトを開けませんでした"
 open_project_in_progress = "このプロジェクトはまだ録画中です。録画が終わってから、もう一度お試しください。"
 open_project_instant = "Instantモードの録画はエディタで開けません。"
-open_project_invalid = "このフォルダはCapのプロジェクトではありません。プロジェクトの .cap フォルダを選択してください。"
+open_project_invalid = "このファイルはCapのプロジェクトではありません。.sayplay ファイルを選択してください。"
 opening_project = "プロジェクトを開いています…"
 retry_upload = "アップロードを再試行"
 show_all = "すべて表示"
@@ -3026,6 +3026,15 @@ worker_failed = "アップロード処理が失敗しました。ローカルの
 empty = "保存された録画は空です"
 no_resumable_state = "この録画には再開できるアップロード状態がありません"
 verification_failed = "録画の確認に失敗しました：{status}"
+
+[project_file]
+filter = "Cap プロジェクト"
+share = "プロジェクトを共有"
+share_failed = "プロジェクトファイルを保存できませんでした：{error}"
+share_failed_title = "プロジェクトを共有できませんでした"
+share_tooltip = "このプロジェクトを1つのファイルとして保存し、同僚に送れるようにします。相手はダブルクリックで開いて編集を続けられます。"
+shared = "{file} を保存しました。このファイルを同僚に送ってください。ダブルクリックで開けます。"
+sharing = "保存しています…"
 
 [message.cli]
 binary_missing = "{path}に同梱のCLIが見つかりません"

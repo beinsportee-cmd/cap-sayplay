@@ -189,12 +189,19 @@ enum QueuedAction {
     DeepLink(DeepLinkAction),
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     Reopen,
+    /// A `.sayplay` file from the command line. Not a [`DeepLinkAction`]: a
+    /// web page must not be able to make the app import files.
+    OpenProjectFile(PathBuf),
 }
 
 impl QueuedAction {
     fn execute(self, cx: &mut App) -> Result<(), String> {
         match self {
             Self::DeepLink(action) => action.execute(cx),
+            Self::OpenProjectFile(path) => {
+                crate::share_project::open_project_file(path, cx).detach();
+                Ok(())
+            }
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             Self::Reopen => {
                 app_windows::handle_dock_reopen(cx);
@@ -224,6 +231,17 @@ pub(crate) fn submit_action(action: DeepLinkAction) {
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) fn submit_reopen() -> bool {
     channel().0.send(QueuedAction::Reopen).is_ok()
+}
+
+pub(crate) fn submit_project_file(path: PathBuf) {
+    tracing::info!(path = %path.display(), "queueing project file");
+    if channel()
+        .0
+        .send(QueuedAction::OpenProjectFile(path))
+        .is_err()
+    {
+        tracing::error!("failed to queue project file");
+    }
 }
 
 /// The one entry point for a URL handed over by the OS -- what
@@ -286,6 +304,8 @@ pub fn init(cx: &mut App) {
     for argument in std::env::args().skip(1) {
         if argument.starts_with("cap-desktop://") || argument.starts_with("cap://") {
             submit_action_url(&argument);
+        } else if let Some(path) = crate::project_file::project_file_argument(&argument) {
+            submit_project_file(path);
         }
     }
 
