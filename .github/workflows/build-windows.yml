@@ -62,6 +62,20 @@ jobs:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
           SAYPLAY_BUILD: "1"
 
+      - name: Typecheck cap-gpui (SayPlay)
+        shell: bash
+        env:
+          SAYPLAY_BUILD: "1"
+          RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+        run: ./scripts/check-sayplay-gpui-compile.sh x86_64-pc-windows-msvc
+
+      - name: Compile cap-gpui release
+        shell: bash
+        env:
+          SAYPLAY_BUILD: "1"
+          RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+        run: ./scripts/build-gpui-binary.sh release x86_64-pc-windows-msvc
+
       - name: Build desktop binaries
         shell: bash
         env:
@@ -82,7 +96,7 @@ jobs:
         env:
           SAYPLAY_BUILD: "1"
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
-        run: node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --bundles nsis
+        run: node scripts/bundle-gpui.mjs x86_64-pc-windows-msvc --bundles nsis --skip-build
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

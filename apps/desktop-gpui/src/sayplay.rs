@@ -1,6 +1,6 @@
 //! Say & Play school build: defaults and branding (see SAYPLAY.md at repo root).
 
-use gpui::AppContext;
+use gpui::{AppContext, Platform};
 
 use crate::main_window::Mode;
 
@@ -43,7 +43,7 @@ pub fn cloud_features_enabled() -> bool {
     !cfg!(sayplay_build)
 }
 
-pub fn open_pricing(cx: &mut impl AppContext) {
+pub fn open_pricing(cx: &mut (impl AppContext + Platform)) {
     if cfg!(sayplay_build) {
         return;
     }

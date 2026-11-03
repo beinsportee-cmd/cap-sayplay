@@ -312,11 +312,16 @@ impl Render for ModeSelectWindow {
                             .flex_row()
                             .items_stretch()
                             .gap(px(16.))
-                            .children(
-                                crate::sayplay::ui_modes()
-                                    .iter()
-                                    .copied()
-                                    .map(|mode| self.render_card(mode, cx)),
+                            .child(
+                                crate::sayplay::ui_modes().iter().fold(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_stretch()
+                                        .gap(px(16.))
+                                        .w_full(),
+                                    |row, &mode| row.child(self.render_card(mode, cx)),
+                                ),
                             ),
                     ),
             );

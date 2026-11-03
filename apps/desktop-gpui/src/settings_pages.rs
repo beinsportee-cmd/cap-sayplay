@@ -3926,25 +3926,30 @@ impl SettingsWindow {
                     tr::settings::license::title(),
                     Some("Local Studio recording for Say & Play School. No Cap account or cloud upload required."),
                     None,
-                    vec![self.card(true).child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(8.))
-                            .child(
-                                div()
-                                    .text_size(px(18.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(crate::sayplay::PRODUCT_NAME),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.))
-                                    .line_height(px(18.))
-                                    .text_color(self.theme.settings_muted())
-                                    .child("Export to file or clipboard. Unlimited local export length."),
-                            ),
-                    )],
+                    vec![self
+                        .card(true)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(8.))
+                                .child(
+                                    div()
+                                        .text_size(px(18.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child(crate::sayplay::PRODUCT_NAME),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(12.))
+                                        .line_height(px(18.))
+                                        .text_color(self.theme.settings_muted())
+                                        .child(
+                                            "Export to file or clipboard. Unlimited local export length.",
+                                        ),
+                                ),
+                        )
+                        .into_any_element()],
                 )
                 .into_any_element()];
         }

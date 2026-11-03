@@ -6534,9 +6534,9 @@ impl MainWindow {
     /// border-gray-5 px-1 py-0.5 bg-gray-3 hover:bg-gray-5`, a button; Pro and
     /// Commercial are a non-interactive span on `--blue-400`. Which one
     /// applies is [`PlanBadge::current`], the license query's resolution.
-    fn render_plan_badge(&self) -> impl IntoElement {
+    fn render_plan_badge(&self) -> gpui::AnyElement {
         if !crate::sayplay::cloud_features_enabled() {
-            return div();
+            return div().into_any_element();
         }
         let theme = self.theme;
 
@@ -6561,7 +6561,8 @@ impl MainWindow {
                 .hover(|style| style.bg(theme.body_hover_fill(5)))
                 .on_click(|_, _, cx| {
                     crate::sayplay::open_pricing(cx);
-                }),
+                })
+                .into_any_element(),
             PlanBadge::Pro | PlanBadge::Commercial => badge
                 .bg(theme.blue_9)
                 .text_color(gpui::white())
@@ -6569,7 +6570,8 @@ impl MainWindow {
                     tr::main::plan::commercial()
                 } else {
                     "Pro"
-                }),
+                })
+                .into_any_element(),
         }
     }
 

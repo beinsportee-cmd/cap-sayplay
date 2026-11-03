@@ -1,0 +1,84 @@
+name: sayplay-gpui-compile
+
+on:
+  push:
+    branches:
+      - sayplay
+    paths:
+      - "apps/desktop-gpui/**"
+      - "scripts/check-sayplay-gpui-compile.sh"
+      - "scripts/build-gpui-binary.sh"
+      - "scripts/prepare-gpui-dependency.sh"
+      - "vendor/ffmpeg-sys-next/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  pull_request:
+    branches:
+      - sayplay
+    paths:
+      - "apps/desktop-gpui/**"
+      - "scripts/check-sayplay-gpui-compile.sh"
+      - "scripts/build-gpui-binary.sh"
+      - "scripts/prepare-gpui-dependency.sh"
+      - "vendor/ffmpeg-sys-next/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SAYPLAY_BUILD: "1"
+  RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+
+jobs:
+  check:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: ./.github/actions/setup-rust-cache
+        with:
+          target: x86_64-pc-windows-msvc
+          prefix-key: v1-sayplay-check
+          save-cache: true
+          cache-on-failure: true
+          workspaces: |
+            . -> target
+            apps/desktop-gpui -> target
+
+      - uses: ./.github/actions/setup-js
+
+      - name: Create .env file
+        shell: bash
+        run: |
+          version="$(grep '^version = ' apps/desktop-gpui/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')"
+          {
+            echo "appVersion=${version}"
+            echo "VITE_ENVIRONMENT=production"
+            echo "NEXT_PUBLIC_WEB_URL=https://cap.so"
+            echo "NEXTAUTH_URL=https://cap.so"
+            echo "VITE_OPENPANEL_CLIENT_ID="
+            echo "VITE_OPENPANEL_API_URL="
+            echo "VITE_SERVER_URL=https://cap.so"
+            echo "RUST_TARGET_TRIPLE=x86_64-pc-windows-msvc"
+          } > .env
+
+      - name: Run cap-setup
+        shell: bash
+        run: bun run cap-setup
+        env:
+          RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+          SAYPLAY_BUILD: "1"
+
+      - name: Typecheck cap-gpui (SayPlay)
+        shell: bash
+        run: ./scripts/check-sayplay-gpui-compile.sh x86_64-pc-windows-msvc

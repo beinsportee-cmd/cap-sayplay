@@ -21,6 +21,13 @@ Icons still use Cap assets until custom artwork is added. Replace files under `a
 3. Run workflow **build-windows-sayplay** (or push to `sayplay`).
 4. Download the NSIS `.exe` from Actions artifacts or the draft release.
 
+**CI guardrails:** pushes to `sayplay` run **sayplay-gpui-compile** (fast `cargo check` on `cap-gpui`) before the full installer job compiles the same binary. If you change Rust UI code, run locally:
+
+```bash
+export SAYPLAY_BUILD=1
+./scripts/check-sayplay-gpui-compile.sh x86_64-pc-windows-msvc
+```
+
 Windows builds are **unsigned**. SmartScreen: **More info → Run anyway**.
 
 ## Universal installer (one `.exe` for every PC)
