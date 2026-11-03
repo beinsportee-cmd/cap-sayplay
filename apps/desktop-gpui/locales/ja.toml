@@ -206,6 +206,33 @@ fps_30 = "30 FPS"
 fps_60 = "60 FPS（推奨）"
 label = "最大キャプチャフレームレート"
 
+[settings.general.recording.camera_fps]
+description = "カメラをオンにしたStudio録画はこのフレームレートまでに抑えられ、最大キャプチャフレームレートを超えることはありません。「小さいファイル」品質ではカメラ使用時に24 FPSになります。"
+fps_30 = "30 FPS（推奨）"
+fps_60 = "60 FPS"
+label = "カメラ使用時のフレームレート"
+
+[settings.general.recording.capture_method]
+automatic = "自動（推奨）"
+backup = "予備の方法のみ"
+description = "自動では元のWindowsの方法を使い、Windowsに拒否された場合だけ予備の方法に切り替えます。「元の方法のみ」は切り替えません。「予備の方法のみ」は全画面と範囲を録画します。ウィンドウ録画は元の方法のままです。"
+label = "録画方法"
+last_backup = "前回の録画：予備の方法"
+last_original = "前回の録画：元の方法"
+original = "元の方法のみ"
+
+[settings.general.preset]
+description = "これらの設定をファイルに保存するか、別のコンピューターで作成したファイルを読み込みます。フォルダー、デバイス、ショートカット、サインインはそれぞれのコンピューターのまま残ります。"
+export = "書き出す…"
+export_failed = "設定ファイルを保存できませんでした。"
+exported = "設定を書き出しました。"
+import = "読み込む…"
+import_failed = "設定プリセットを読み込めませんでした。"
+imported = "設定を読み込みました。"
+newer = "このプリセットは新しいバージョンで作成されています。アプリを更新してから、もう一度読み込んでください。"
+not_a_preset = "このファイルは設定プリセットではありません。"
+title = "設定プリセット"
+
 [settings.general.storage]
 choose_folder = "フォルダを選択"
 default_location = "デフォルト（Application Support）"

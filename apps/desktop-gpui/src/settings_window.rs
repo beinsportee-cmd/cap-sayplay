@@ -36,8 +36,9 @@ use crate::{
     main_window::Mode,
     sign_in::{SignIn, SignInEvent, SignInOrigin, SignInOutcome},
     store::{
-        self, AppTheme, DEFAULT_PROJECT_NAME_TEMPLATE, DEFAULT_SERVER_URL, GENERAL_SETTINGS,
-        GeneralSettings, MainWindowStartBehaviour, PostDeletionBehaviour, RECORDING_START_SAFETY,
+        self, AppTheme, CAMERA_MAX_FPS_KEY, CAPTURE_METHOD_KEY, CaptureMethod,
+        DEFAULT_PROJECT_NAME_TEMPLATE, DEFAULT_SERVER_URL, GENERAL_SETTINGS, GeneralSettings,
+        MainWindowStartBehaviour, PostDeletionBehaviour, RECORDING_START_SAFETY,
         SettingsEnum, StudioQuality, UpdateChannel, UpdateDownloadPolicy, WindowCaptureStyle,
         WindowExclusion,
     },
@@ -199,6 +200,8 @@ pub(crate) enum MenuKind {
     WindowCapture,
     PostDeletion,
     MaxFps,
+    CameraFps,
+    CaptureMethod,
     Language,
     /// The excluded-windows card's Add button, whose menu is the live window
     /// list rather than a fixed option set.
@@ -236,6 +239,11 @@ const MAX_FPS_OPTIONS: &[(u32, fn() -> &'static str)] = &[
     (30, tr::settings::general::recording::max_fps::fps_30),
     (60, tr::settings::general::recording::max_fps::fps_60),
     (120, tr::settings::general::recording::max_fps::fps_120),
+];
+
+const CAMERA_FPS_OPTIONS: &[(u32, fn() -> &'static str)] = &[
+    (30, tr::settings::general::recording::camera_fps::fps_30),
+    (60, tr::settings::general::recording::camera_fps::fps_60),
 ];
 
 /// The Countdown select's options.
@@ -1593,6 +1601,13 @@ impl SettingsWindow {
                 .iter()
                 .map(|(value, label)| ui::MenuItem::new(label(), *value == self.settings.max_fps))
                 .collect(),
+            MenuKind::CameraFps => CAMERA_FPS_OPTIONS
+                .iter()
+                .map(|(value, label)| {
+                    ui::MenuItem::new(label(), *value == self.settings.camera_max_fps)
+                })
+                .collect(),
+            MenuKind::CaptureMethod => enum_items(self.settings.capture_method),
             MenuKind::Language => {
                 let current = self.language_preference();
                 i18n::Preference::options()
@@ -1632,6 +1647,21 @@ impl SettingsWindow {
                 if let Some((value, _)) = MAX_FPS_OPTIONS.get(index) {
                     self.settings.max_fps = *value;
                     self.write_u32("maxFps", *value, cx);
+                }
+            }
+            MenuKind::CameraFps => {
+                if let Some((value, _)) = CAMERA_FPS_OPTIONS.get(index) {
+                    self.settings.camera_max_fps = *value;
+                    self.write_u32(CAMERA_MAX_FPS_KEY, *value, cx);
+                }
+            }
+            MenuKind::CaptureMethod => {
+                if let Some(value) = CaptureMethod::ALL.get(index) {
+                    self.settings.capture_method = *value;
+                    self.write_enum(CAPTURE_METHOD_KEY, *value, cx);
+                    cap_recording::screen_capture::set_capture_method(
+                        self.settings.capture_method.into(),
+                    );
                 }
             }
             MenuKind::Language => {
@@ -3318,6 +3348,7 @@ impl SettingsWindow {
             self.render_updates(cx).into_any_element(),
             self.render_self_host(window, cx).into_any_element(),
             self.render_privacy(cx).into_any_element(),
+            self.render_settings_preset(cx).into_any_element(),
         ]);
         sections
     }
@@ -3780,6 +3811,11 @@ impl SettingsWindow {
             .find(|(value, _)| *value == settings.max_fps)
             .map(|(_, label)| label().to_string())
             .unwrap_or_else(|| settings.max_fps.to_string());
+        let camera_fps_label = CAMERA_FPS_OPTIONS
+            .iter()
+            .find(|(value, _)| *value == settings.camera_max_fps)
+            .map(|(_, label)| label().to_string())
+            .unwrap_or_else(|| settings.camera_max_fps.to_string());
         let zoom = settings.default_zoom_amount.unwrap_or(1.5);
 
         self.section(
@@ -4007,10 +4043,58 @@ impl SettingsWindow {
                         self.select("max-fps", fps_label, MenuKind::MaxFps, cx)
                             .into_any_element(),
                     ),
-                ])
+                    self.setting_row(
+                        tr::settings::general::recording::camera_fps::label(),
+                        Some(tr::settings::general::recording::camera_fps::description()),
+                        self.select("camera-fps", camera_fps_label, MenuKind::CameraFps, cx)
+                            .into_any_element(),
+                    ),
+                ]
+                .into_iter()
+                .chain(self.render_capture_method_row(cx))
+                .collect())
                 .into_any_element(),
             ],
         )
+    }
+
+    /// Which Windows API records the screen, and which one the last
+    /// recording since launch actually used.
+    fn render_capture_method_row(&self, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        if !cfg!(target_os = "windows") {
+            return None;
+        }
+        let last_used = match cap_recording::screen_capture::last_capture_api() {
+            Some(cap_recording::screen_capture::CaptureApi::GraphicsCapture) => {
+                Some(tr::settings::general::recording::capture_method::last_original())
+            }
+            Some(cap_recording::screen_capture::CaptureApi::DesktopDuplication) => {
+                Some(tr::settings::general::recording::capture_method::last_backup())
+            }
+            None => None,
+        };
+        let control = div()
+            .flex()
+            .flex_col()
+            .items_end()
+            .gap(px(4.))
+            .child(self.select(
+                "capture-method",
+                self.settings.capture_method.label(),
+                MenuKind::CaptureMethod,
+                cx,
+            ))
+            .children(last_used.map(|text| {
+                div()
+                    .text_size(px(11.))
+                    .text_color(self.theme.settings_muted())
+                    .child(text)
+            }));
+        Some(self.setting_row(
+            tr::settings::general::recording::capture_method::label(),
+            Some(tr::settings::general::recording::capture_method::description()),
+            control.into_any_element(),
+        ))
     }
 
     /// `StorageSection` -- `recordingsPath`.
@@ -4740,6 +4824,166 @@ impl SettingsWindow {
                 this.write("serverUrl", Value::String(origin), cx);
             })
             .ok();
+        })
+        .detach();
+    }
+
+    /// This computer's settings to a file, or a file's onto this computer
+    /// (`settings_preset`).
+    fn render_settings_preset(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let actions = div()
+            .flex()
+            .flex_row()
+            .justify_end()
+            .gap(px(8.))
+            .child(self.button(
+                "preset-import",
+                (ui::ButtonVariant::Gray, None),
+                tr::settings::general::preset::import(),
+                false,
+                cx,
+                |this, window, cx| this.import_settings_preset(window, cx),
+            ))
+            .child(self.button(
+                "preset-export",
+                (ui::ButtonVariant::Dark, None),
+                tr::settings::general::preset::export(),
+                false,
+                cx,
+                |this, window, cx| this.export_settings_preset(window, cx),
+            ));
+        self.section(
+            tr::settings::general::preset::title(),
+            Some(tr::settings::general::preset::description()),
+            None,
+            vec![self.card(true).child(actions).into_any_element()],
+        )
+    }
+
+    fn export_settings_preset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let directory = dirs::document_dir()
+            .or_else(dirs::home_dir)
+            .unwrap_or_default();
+        let path = cx.prompt_for_new_path(&directory, Some(crate::settings_preset::FILE_NAME));
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(mut path))) = path.await else {
+                return;
+            };
+            if path.extension().is_none() {
+                path.set_extension("json");
+            }
+            let result = crate::settings_preset::export(&path);
+            this.update_in(cx, |this, window, cx| {
+                let (level, message) = match result {
+                    Ok(()) => (
+                        gpui::PromptLevel::Info,
+                        tr::settings::general::preset::exported(),
+                    ),
+                    Err(error) => {
+                        tracing::warn!(?error, "exporting the settings preset");
+                        (
+                            gpui::PromptLevel::Warning,
+                            tr::settings::general::preset::export_failed(),
+                        )
+                    }
+                };
+                this.preset_message(level, message, window, cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn import_settings_preset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: None,
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = paths.await else {
+                return;
+            };
+            let Some(path) = paths.into_iter().next() else {
+                return;
+            };
+            let result = crate::settings_preset::import(&path);
+            this.update_in(cx, |this, window, cx| {
+                let (level, message) = match result {
+                    Ok(()) => {
+                        this.apply_imported_settings(window, cx);
+                        (
+                            gpui::PromptLevel::Info,
+                            tr::settings::general::preset::imported(),
+                        )
+                    }
+                    Err(error) => {
+                        tracing::warn!(?error, "importing a settings preset");
+                        let message = match error {
+                            crate::settings_preset::PresetError::NotAPreset => {
+                                tr::settings::general::preset::not_a_preset()
+                            }
+                            crate::settings_preset::PresetError::Newer => {
+                                tr::settings::general::preset::newer()
+                            }
+                            crate::settings_preset::PresetError::File(_)
+                            | crate::settings_preset::PresetError::Store => {
+                                tr::settings::general::preset::import_failed()
+                            }
+                        };
+                        (gpui::PromptLevel::Warning, message)
+                    }
+                };
+                this.preset_message(level, message, window, cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Brings this window, and what reads settings only when they change,
+    /// up to the store an import just rewrote.
+    fn apply_imported_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let previous = std::mem::replace(&mut self.settings, GeneralSettings::load());
+        cap_recording::screen_capture::set_capture_method(self.settings.capture_method.into());
+        if self.settings.theme != previous.theme {
+            crate::theme::set_preference(self.settings.theme, cx);
+            crate::theme::apply_native(window, cx);
+            self.theme.refresh(window, cx, true);
+            cx.defer(|cx: &mut gpui::App| crate::app_windows::broadcast_theme(cx));
+        }
+        if self.settings.ui_language != previous.ui_language {
+            let preference = self.language_preference();
+            cx.defer(move |cx: &mut gpui::App| i18n::apply(preference, cx));
+        }
+        let project_name = self
+            .settings
+            .default_project_name_template
+            .clone()
+            .unwrap_or_else(|| DEFAULT_PROJECT_NAME_TEMPLATE.to_string());
+        self.project_name = project_name.clone();
+        let input = self.project_name_input.clone();
+        input.update(cx, |input, cx| input.set_text(project_name, cx));
+        cx.notify();
+    }
+
+    fn preset_message(
+        &mut self,
+        level: gpui::PromptLevel,
+        message: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let answer = window.prompt(
+            level,
+            message,
+            None,
+            &[gpui::PromptButton::ok(tr::common::ok())],
+            cx,
+        );
+        cx.spawn(async move |_this, _cx| {
+            let _ = answer.await;
         })
         .detach();
     }

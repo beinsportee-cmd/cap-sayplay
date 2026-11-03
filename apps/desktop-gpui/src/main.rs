@@ -90,6 +90,7 @@ mod script_text;
 mod session;
 mod sayplay;
 mod settings_pages;
+mod settings_preset;
 mod settings_window;
 mod share_project;
 mod sign_in;
@@ -396,6 +397,7 @@ fn main() {
         ui::bind_text_input_keys(cx);
         crate::sayplay::apply_school_defaults();
         let general_settings = crate::store::GeneralSettings::load();
+        cap_recording::screen_capture::set_capture_method(general_settings.capture_method.into());
         crate::i18n::init(general_settings.ui_language.as_deref());
         crate::theme::init(general_settings.theme, cx);
         platform::follow_system_reduce_motion(cx);

@@ -328,6 +328,94 @@ fn english_matches_the_literals_it_replaced() {
             "Max capture framerate".into(),
         ),
         (
+            tr::settings::general::recording::camera_fps::description(),
+            "Studio recordings with the camera on are held to this framerate, never \
+                             above the max capture framerate. The Smaller files quality uses \
+                             24 FPS with the camera."
+                .into(),
+        ),
+        (
+            tr::settings::general::recording::camera_fps::fps_30(),
+            "30 FPS (Recommended)".into(),
+        ),
+        (
+            tr::settings::general::recording::camera_fps::fps_60(),
+            "60 FPS".into(),
+        ),
+        (
+            tr::settings::general::recording::camera_fps::label(),
+            "Framerate with camera on".into(),
+        ),
+        (
+            tr::settings::general::recording::capture_method::automatic(),
+            "Automatic (Recommended)".into(),
+        ),
+        (
+            tr::settings::general::recording::capture_method::backup(),
+            "Backup only".into(),
+        ),
+        (
+            tr::settings::general::recording::capture_method::description(),
+            "Automatic uses the original Windows method and switches to the backup only \
+                             if Windows refuses it. Original only never switches. Backup only \
+                             records full screen and areas; window recordings keep the original \
+                             method."
+                .into(),
+        ),
+        (
+            tr::settings::general::recording::capture_method::label(),
+            "Recording method".into(),
+        ),
+        (
+            tr::settings::general::recording::capture_method::last_backup(),
+            "Last recording: backup method".into(),
+        ),
+        (
+            tr::settings::general::recording::capture_method::last_original(),
+            "Last recording: original method".into(),
+        ),
+        (
+            tr::settings::general::recording::capture_method::original(),
+            "Original only".into(),
+        ),
+        (
+            tr::settings::general::preset::description(),
+            "Save these settings to a file, or load a file made on another computer. \
+                             Folders, devices, shortcuts and sign-in stay as they are on each \
+                             computer."
+                .into(),
+        ),
+        (tr::settings::general::preset::export(), "Export…".into()),
+        (
+            tr::settings::general::preset::export_failed(),
+            "The settings file couldn't be saved.".into(),
+        ),
+        (
+            tr::settings::general::preset::exported(),
+            "Settings exported.".into(),
+        ),
+        (tr::settings::general::preset::import(), "Import…".into()),
+        (
+            tr::settings::general::preset::import_failed(),
+            "The settings preset couldn't be imported.".into(),
+        ),
+        (
+            tr::settings::general::preset::imported(),
+            "Settings imported.".into(),
+        ),
+        (
+            tr::settings::general::preset::newer(),
+            "This preset was made by a newer version. Update the app, then import it again.".into(),
+        ),
+        (
+            tr::settings::general::preset::not_a_preset(),
+            "This file isn't a settings preset.".into(),
+        ),
+        (
+            tr::settings::general::preset::title(),
+            "Settings preset".into(),
+        ),
+        (
             tr::settings::general::storage::choose_folder(),
             "Choose Folder".into(),
         ),

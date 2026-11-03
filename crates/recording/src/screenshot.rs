@@ -1411,10 +1411,10 @@ pub async fn capture_screenshot(target: ScreenCaptureTarget) -> anyhow::Result<D
 
     #[cfg(target_os = "windows")]
     {
-        // Lets a PC where Windows Graphics Capture works take the route of
-        // one that refuses it, like recording does.
-        let graphics_capture_disabled = std::env::var("SAYPLAY_CAPTURE_BACKEND")
-            .is_ok_and(|value| value.trim().eq_ignore_ascii_case("duplication"));
+        // The backup-only Recording method takes screenshots the way a PC
+        // that refuses Windows Graphics Capture does.
+        let graphics_capture_disabled = crate::sources::screen_capture::capture_method()
+            == crate::sources::screen_capture::CaptureMethod::DesktopDuplication;
         if !windows_fast_path_available() || graphics_capture_disabled {
             let fallback_image = gdi_or_error(
                 &target,

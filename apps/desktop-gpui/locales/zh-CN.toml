@@ -206,6 +206,33 @@ fps_30 = "30 FPS"
 fps_60 = "60 FPS（推荐）"
 label = "最大捕获帧率"
 
+[settings.general.recording.camera_fps]
+description = "开启摄像头的 Studio 录制会限制在此帧率，且不会超过最大捕获帧率。“更小的文件”画质在使用摄像头时为 24 FPS。"
+fps_30 = "30 FPS（推荐）"
+fps_60 = "60 FPS"
+label = "开启摄像头时的帧率"
+
+[settings.general.recording.capture_method]
+automatic = "自动（推荐）"
+backup = "仅备用方法"
+description = "自动会使用原始的 Windows 方法，只有在 Windows 拒绝时才切换到备用方法。“仅原始方法”从不切换。“仅备用方法”可录制全屏和区域；窗口录制仍使用原始方法。"
+label = "录制方法"
+last_backup = "上次录制：备用方法"
+last_original = "上次录制：原始方法"
+original = "仅原始方法"
+
+[settings.general.preset]
+description = "将这些设置保存到文件，或载入在其他电脑上创建的文件。文件夹、设备、快捷键和登录信息在每台电脑上保持不变。"
+export = "导出…"
+export_failed = "无法保存设置文件。"
+exported = "设置已导出。"
+import = "导入…"
+import_failed = "无法导入设置预设。"
+imported = "设置已导入。"
+newer = "此预设由更新的版本创建。请先更新应用，然后重新导入。"
+not_a_preset = "此文件不是设置预设。"
+title = "设置预设"
+
 [settings.general.storage]
 choose_folder = "选择文件夹"
 default_location = "默认（Application Support）"

@@ -206,6 +206,33 @@ fps_30 = "30 i/s"
 fps_60 = "60 i/s (recommandé)"
 label = "Fréquence d'images maximale"
 
+[settings.general.recording.camera_fps]
+description = "Les enregistrements Studio avec la caméra sont limités à cette fréquence, sans jamais dépasser la fréquence d'images maximale. La qualité Fichiers plus légers utilise 24 i/s avec la caméra."
+fps_30 = "30 i/s (recommandé)"
+fps_60 = "60 i/s"
+label = "Fréquence d'images avec la caméra"
+
+[settings.general.recording.capture_method]
+automatic = "Automatique (recommandé)"
+backup = "Secours uniquement"
+description = "Automatique utilise la méthode Windows d'origine et ne passe à la méthode de secours que si Windows la refuse. Origine uniquement ne change jamais. Secours uniquement enregistre l'écran entier et les zones ; les enregistrements de fenêtre gardent la méthode d'origine."
+label = "Méthode d'enregistrement"
+last_backup = "Dernier enregistrement : méthode de secours"
+last_original = "Dernier enregistrement : méthode d'origine"
+original = "Origine uniquement"
+
+[settings.general.preset]
+description = "Enregistrez ces paramètres dans un fichier, ou chargez un fichier créé sur un autre ordinateur. Les dossiers, appareils, raccourcis et la connexion restent propres à chaque ordinateur."
+export = "Exporter…"
+export_failed = "Le fichier de paramètres n'a pas pu être enregistré."
+exported = "Paramètres exportés."
+import = "Importer…"
+import_failed = "Le préréglage n'a pas pu être importé."
+imported = "Paramètres importés."
+newer = "Ce préréglage a été créé par une version plus récente. Mettez l'application à jour, puis importez-le à nouveau."
+not_a_preset = "Ce fichier n'est pas un préréglage de paramètres."
+title = "Préréglage de paramètres"
+
 [settings.general.storage]
 choose_folder = "Choisir un dossier"
 default_location = "Par défaut (Application Support)"

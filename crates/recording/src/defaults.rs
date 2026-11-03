@@ -4,6 +4,7 @@ pub const FREE_INSTANT_MODE_MAX_RESOLUTION: u32 = 1280;
 pub const PRO_INSTANT_MODE_MAX_RESOLUTION: u32 = 1920;
 pub const DEFAULT_INSTANT_MODE_MAX_RESOLUTION: u32 = PRO_INSTANT_MODE_MAX_RESOLUTION;
 pub const DEFAULT_STUDIO_MAX_FPS: u32 = 60;
+pub const CAMERA_ACTIVE_STUDIO_MAX_FPS: u32 = 30;
 pub const DEFAULT_INSTANT_MODE_FPS: u32 = 30;
 pub const DEFAULT_CUSTOM_CURSOR_CAPTURE: bool = true;
 pub const DEFAULT_CAPTURE_KEYBOARD_EVENTS: bool = true;
@@ -21,6 +22,8 @@ pub struct RecordingDefaults {
     pub capture_keyboard_events: bool,
     pub crash_recovery_recording: bool,
     pub max_fps: u32,
+    /// What studio recordings with a camera are held to, below `max_fps`.
+    pub camera_max_fps: u32,
     pub studio_recording_quality: StudioQuality,
     pub out_of_process_muxer: bool,
     pub instant_mode_max_resolution: u32,
@@ -33,6 +36,7 @@ impl Default for RecordingDefaults {
             capture_keyboard_events: DEFAULT_CAPTURE_KEYBOARD_EVENTS,
             crash_recovery_recording: DEFAULT_CRASH_RECOVERY_RECORDING,
             max_fps: DEFAULT_STUDIO_MAX_FPS,
+            camera_max_fps: CAMERA_ACTIVE_STUDIO_MAX_FPS,
             studio_recording_quality: default_studio_recording_quality(),
             out_of_process_muxer: DEFAULT_OUT_OF_PROCESS_MUXER,
             instant_mode_max_resolution: DEFAULT_INSTANT_MODE_MAX_RESOLUTION,
@@ -41,10 +45,15 @@ impl Default for RecordingDefaults {
 }
 
 impl RecordingDefaults {
-    /// The user's Max capture framerate, camera or not; only Compatibility
-    /// quality lowers it with a camera (see `studio_recording`).
-    pub fn studio_max_fps(self, _camera_active: bool, override_fps: Option<u32>) -> u32 {
-        override_fps.unwrap_or(self.max_fps)
+    /// Compatibility quality lowers this further with a camera (see
+    /// `studio_recording`).
+    pub fn studio_max_fps(self, camera_active: bool, override_fps: Option<u32>) -> u32 {
+        let max_fps = override_fps.unwrap_or(self.max_fps);
+        if camera_active {
+            max_fps.min(self.camera_max_fps)
+        } else {
+            max_fps
+        }
     }
 
     pub fn apply_to_studio_builder(
@@ -77,5 +86,29 @@ pub fn default_studio_recording_quality() -> StudioQuality {
             StudioQuality::Compatibility
         }
         _ => StudioQuality::Balanced,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn defaults(max_fps: u32, camera_max_fps: u32) -> RecordingDefaults {
+        RecordingDefaults {
+            max_fps,
+            camera_max_fps,
+            ..RecordingDefaults::default()
+        }
+    }
+
+    #[test]
+    fn camera_holds_studio_fps_to_its_own_limit() {
+        assert_eq!(RecordingDefaults::default().studio_max_fps(true, None), 30);
+        assert_eq!(defaults(60, 30).studio_max_fps(true, None), 30);
+        assert_eq!(defaults(60, 60).studio_max_fps(true, None), 60);
+        assert_eq!(defaults(24, 60).studio_max_fps(true, None), 24);
+        assert_eq!(defaults(60, 30).studio_max_fps(false, None), 60);
+        assert_eq!(defaults(60, 30).studio_max_fps(true, Some(60)), 30);
+        assert_eq!(defaults(60, 30).studio_max_fps(false, Some(25)), 25);
     }
 }

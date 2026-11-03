@@ -568,14 +568,13 @@ enum CaptureBackend {
     Duplication,
 }
 
-/// `SAYPLAY_CAPTURE_BACKEND=duplication` forces Desktop Duplication and
-/// `=wgc` disables the fallback, for testing either path on a PC where both work.
+/// The backend the Recording method setting (or `SAYPLAY_CAPTURE_BACKEND`)
+/// forces, with no fallback to the other; `None` for Automatic.
 fn capture_backend_override() -> Option<CaptureBackend> {
-    let value = std::env::var("SAYPLAY_CAPTURE_BACKEND").ok()?;
-    match value.trim().to_ascii_lowercase().as_str() {
-        "duplication" | "dxgi" => Some(CaptureBackend::Duplication),
-        "wgc" | "graphics" => Some(CaptureBackend::Graphics),
-        _ => None,
+    match super::capture_method() {
+        super::CaptureMethod::Automatic => None,
+        super::CaptureMethod::GraphicsCapture => Some(CaptureBackend::Graphics),
+        super::CaptureMethod::DesktopDuplication => Some(CaptureBackend::Duplication),
     }
 }
 
@@ -680,7 +679,13 @@ fn start_screen_capturer(
     allow_fallback: bool,
 ) -> anyhow::Result<()> {
     let error = match capturer.start() {
-        Ok(()) => return Ok(()),
+        Ok(()) => {
+            super::note_capture_api(match capturer {
+                ScreenCapturer::Graphics(_) => super::CaptureApi::GraphicsCapture,
+                ScreenCapturer::Duplication(_) => super::CaptureApi::DesktopDuplication,
+            });
+            return Ok(());
+        }
         Err(error) => error,
     };
     if !allow_fallback || !matches!(capturer, ScreenCapturer::Graphics(_)) {
@@ -696,6 +701,7 @@ fn start_screen_capturer(
         .start()
         .map_err(|error| anyhow!("Desktop Duplication failed to start: {error}"))?;
     *capturer = ScreenCapturer::Duplication(duplication);
+    super::note_capture_api(super::CaptureApi::DesktopDuplication);
     Ok(())
 }
 
@@ -1001,7 +1007,7 @@ impl output_pipeline::VideoSource for VideoSource {
 
                 let backend_override = capture_backend_override();
                 if let Some(backend) = backend_override {
-                    info!(?backend, "Windows capture backend forced via SAYPLAY_CAPTURE_BACKEND");
+                    info!(?backend, "Windows capture backend forced by the Recording method setting");
                 }
                 // Desktop Duplication can't isolate a window, and a forced
                 // backend is never swapped for the other.

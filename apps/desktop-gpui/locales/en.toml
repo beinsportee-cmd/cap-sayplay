@@ -208,6 +208,33 @@ fps_30 = { text = "30 FPS", max_px = 180, size = 12 }
 fps_60 = { text = "60 FPS (Recommended)", max_px = 180, size = 12 }
 label = "Max capture framerate"
 
+[settings.general.recording.camera_fps]
+description = "Studio recordings with the camera on are held to this framerate, never above the max capture framerate. The Smaller files quality uses 24 FPS with the camera."
+fps_30 = "30 FPS (Recommended)"
+fps_60 = "60 FPS"
+label = "Framerate with camera on"
+
+[settings.general.recording.capture_method]
+automatic = "Automatic (Recommended)"
+backup = "Backup only"
+description = { text = "Automatic uses the original Windows method and switches to the backup only if Windows refuses it. Original only never switches. Backup only records full screen and areas; window recordings keep the original method.", context = "Windows only. The original method is Windows Graphics Capture; the backup is Desktop Duplication." }
+label = "Recording method"
+last_backup = { text = "Last recording: backup method", context = "Shown under the Recording method select once a recording has started since the app opened." }
+last_original = { text = "Last recording: original method", context = "Shown under the Recording method select once a recording has started since the app opened." }
+original = "Original only"
+
+[settings.general.preset]
+description = "Save these settings to a file, or load a file made on another computer. Folders, devices, shortcuts and sign-in stay as they are on each computer."
+export = "Export…"
+export_failed = "The settings file couldn't be saved."
+exported = "Settings exported."
+import = "Import…"
+import_failed = "The settings preset couldn't be imported."
+imported = "Settings imported."
+newer = "This preset was made by a newer version. Update the app, then import it again."
+not_a_preset = "This file isn't a settings preset."
+title = "Settings preset"
+
 [settings.general.storage]
 choose_folder = "Choose Folder"
 default_location = { text = "Default (Application Support)", context = "Shown in place of a folder path when recordings use the default location." }

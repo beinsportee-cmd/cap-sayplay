@@ -206,6 +206,33 @@ fps_30 = "30 FPS"
 fps_60 = "60 FPS (empfohlen)"
 label = "Maximale Bildrate"
 
+[settings.general.recording.camera_fps]
+description = "Studio-Aufnahmen mit eingeschalteter Kamera werden auf diese Bildrate begrenzt, nie über die maximale Bildrate. Die Qualität Kleinere Dateien nutzt mit Kamera 24 FPS."
+fps_30 = "30 FPS (empfohlen)"
+fps_60 = "60 FPS"
+label = "Bildrate mit Kamera"
+
+[settings.general.recording.capture_method]
+automatic = "Automatisch (empfohlen)"
+backup = "Nur Ersatzmethode"
+description = "Automatisch nutzt die ursprüngliche Windows-Methode und wechselt nur zur Ersatzmethode, wenn Windows sie verweigert. Nur Original wechselt nie. Nur Ersatzmethode nimmt den ganzen Bildschirm und Bereiche auf; Fensteraufnahmen behalten die ursprüngliche Methode."
+label = "Aufnahmemethode"
+last_backup = "Letzte Aufnahme: Ersatzmethode"
+last_original = "Letzte Aufnahme: ursprüngliche Methode"
+original = "Nur Original"
+
+[settings.general.preset]
+description = "Speichere diese Einstellungen in einer Datei oder lade eine Datei, die auf einem anderen Computer erstellt wurde. Ordner, Geräte, Tastenkürzel und Anmeldung bleiben auf jedem Computer, wie sie sind."
+export = "Exportieren…"
+export_failed = "Die Einstellungsdatei konnte nicht gespeichert werden."
+exported = "Einstellungen exportiert."
+import = "Importieren…"
+import_failed = "Die Voreinstellung konnte nicht importiert werden."
+imported = "Einstellungen importiert."
+newer = "Diese Voreinstellung stammt aus einer neueren Version. Aktualisiere die App und importiere sie dann erneut."
+not_a_preset = "Diese Datei ist keine Einstellungs-Voreinstellung."
+title = "Einstellungs-Voreinstellung"
+
 [settings.general.storage]
 choose_folder = "Ordner wählen"
 default_location = "Standard (Application Support)"

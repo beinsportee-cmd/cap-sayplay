@@ -510,7 +510,7 @@ pub fn update_store_section(
 /// Reads, mutates and rewrites the store as one step, so two writers cannot
 /// both start from the same snapshot and drop each other's changes. Returning
 /// false from `mutate` leaves the file untouched.
-fn update_store(mutate: impl FnOnce(&mut Map<String, Value>) -> bool) -> bool {
+pub(crate) fn update_store(mutate: impl FnOnce(&mut Map<String, Value>) -> bool) -> bool {
     let _guard = STORE_UPDATE_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -734,6 +734,31 @@ settings_enum! {
     }
     default = ScreenRegion
 }
+
+settings_enum! {
+    /// Which Windows API records the screen (SayPlay-only key). Automatic
+    /// starts with the original one, Windows Graphics Capture, and switches
+    /// to the backup when Windows refuses it.
+    CaptureMethod {
+        Automatic = "automatic", tr::settings::general::recording::capture_method::automatic();
+        Original = "original", tr::settings::general::recording::capture_method::original();
+        Backup = "backup", tr::settings::general::recording::capture_method::backup();
+    }
+    default = Automatic
+}
+
+impl From<CaptureMethod> for cap_recording::screen_capture::CaptureMethod {
+    fn from(method: CaptureMethod) -> Self {
+        match method {
+            CaptureMethod::Automatic => Self::Automatic,
+            CaptureMethod::Original => Self::GraphicsCapture,
+            CaptureMethod::Backup => Self::DesktopDuplication,
+        }
+    }
+}
+
+pub const CAPTURE_METHOD_KEY: &str = "sayplayCaptureMethod";
+pub const CAMERA_MAX_FPS_KEY: &str = "sayplayCameraMaxFps";
 
 settings_enum! {
     /// `PostStudioRecordingBehaviour`.
@@ -1048,6 +1073,10 @@ pub struct GeneralSettings {
     pub capture_keyboard_events: bool,
     pub macbook_notch_overlay: bool,
     pub max_fps: u32,
+    /// The framerate Studio recordings with the camera on are held to, under
+    /// `max_fps`.
+    pub camera_max_fps: u32,
+    pub capture_method: CaptureMethod,
     pub recordings_path: Option<String>,
     /// Custom folders the library has been pointed at before. Not rendered by
     /// any page -- the recordings scan reads it, because
@@ -1466,6 +1495,12 @@ impl GeneralSettings {
             capture_keyboard_events: bool_at(general, "captureKeyboardEvents", true),
             macbook_notch_overlay: bool_at(general, "macbookNotchOverlay", false),
             max_fps: u32_at(general, "maxFps", 60),
+            camera_max_fps: u32_at(
+                general,
+                CAMERA_MAX_FPS_KEY,
+                cap_recording::CAMERA_ACTIVE_STUDIO_MAX_FPS,
+            ),
+            capture_method: enum_at(general, CAPTURE_METHOD_KEY),
             recordings_path: opt_string_at(general, "recordingsPath"),
             previous_recordings_paths: strings_at(general, "previousRecordingsPaths"),
             default_project_name_template: opt_string_at(general, "defaultProjectNameTemplate"),

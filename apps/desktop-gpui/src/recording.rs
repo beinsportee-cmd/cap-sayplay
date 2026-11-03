@@ -2513,6 +2513,7 @@ async fn start_attempt_with_upload(
         capture_keyboard_events: settings.capture_keyboard_events,
         crash_recovery_recording: settings.crash_recovery_recording,
         max_fps: settings.max_fps,
+        camera_max_fps: settings.camera_max_fps,
         studio_recording_quality: settings.studio_recording_quality.into(),
         out_of_process_muxer: settings.out_of_process_muxer,
         instant_mode_max_resolution: cap_recording::DEFAULT_INSTANT_MODE_MAX_RESOLUTION,
@@ -2550,6 +2551,7 @@ async fn start_attempt_with_upload(
             == crate::store::WindowCaptureStyle::FocusedWindow;
     let handle = match config.mode {
         RecordingMode::Studio => {
+            cap_recording::screen_capture::set_capture_method(settings.capture_method.into());
             cap_recording::screen_capture::reset_cursor_in_screen_video();
             let mut builder = defaults.apply_to_studio_builder(
                 studio_recording::Actor::builder(project_dir.clone(), config.target.clone())

@@ -206,6 +206,33 @@ fps_30 = "30 FPS"
 fps_60 = "60 FPS (recomendado)"
 label = "Velocidad de fotogramas máxima"
 
+[settings.general.recording.camera_fps]
+description = "Las grabaciones de Studio con la cámara activada se limitan a esta velocidad, nunca por encima de la velocidad de fotogramas máxima. La calidad Archivos más pequeños usa 24 FPS con la cámara."
+fps_30 = "30 FPS (recomendado)"
+fps_60 = "60 FPS"
+label = "Velocidad de fotogramas con cámara"
+
+[settings.general.recording.capture_method]
+automatic = "Automático (recomendado)"
+backup = "Solo respaldo"
+description = "Automático usa el método original de Windows y solo cambia al de respaldo si Windows lo rechaza. Solo original nunca cambia. Solo respaldo graba la pantalla completa y áreas; las grabaciones de ventana siguen usando el método original."
+label = "Método de grabación"
+last_backup = "Última grabación: método de respaldo"
+last_original = "Última grabación: método original"
+original = "Solo original"
+
+[settings.general.preset]
+description = "Guarda estos ajustes en un archivo o carga un archivo creado en otro ordenador. Las carpetas, los dispositivos, los atajos y la sesión se mantienen en cada ordenador."
+export = "Exportar…"
+export_failed = "No se pudo guardar el archivo de ajustes."
+exported = "Ajustes exportados."
+import = "Importar…"
+import_failed = "No se pudo importar el preajuste."
+imported = "Ajustes importados."
+newer = "Este preajuste se creó con una versión más reciente. Actualiza la aplicación y vuelve a importarlo."
+not_a_preset = "Este archivo no es un preajuste de ajustes."
+title = "Preajuste de ajustes"
+
 [settings.general.storage]
 choose_folder = "Elegir carpeta"
 default_location = "Predeterminada (Application Support)"

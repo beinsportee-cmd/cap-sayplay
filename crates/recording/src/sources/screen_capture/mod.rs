@@ -9,6 +9,13 @@ use std::time::SystemTime;
 use tracing::*;
 
 pub mod cadence;
+mod capture_method;
+
+#[cfg(target_os = "windows")]
+use capture_method::note_capture_api;
+pub use capture_method::{
+    CaptureApi, CaptureMethod, capture_method, last_capture_api, set_capture_method,
+};
 
 #[cfg(target_os = "windows")]
 mod windows;
