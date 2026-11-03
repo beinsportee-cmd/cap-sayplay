@@ -358,7 +358,10 @@ fn capture_samples_on(
             if !frame_delay.is_zero() {
                 std::thread::sleep(frame_delay);
             }
-            let content = frame.inner().ContentSize()?;
+            let content = frame
+                .inner()
+                .expect("WGC frames carry their capture frame")
+                .ContentSize()?;
             let content = (content.Width.max(0) as u32, content.Height.max(0) as u32);
             let buffer = frame.as_buffer()?;
             let (width, height, stride) = (

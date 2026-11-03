@@ -27,7 +27,7 @@ use tracing::error;
 #[cfg(target_os = "macos")]
 use core_graphics::geometry::{CGPoint, CGRect, CGSize};
 #[cfg(target_os = "windows")]
-use scap_direct3d::{Capturer, Frame, NewCapturerError, PixelFormat, Settings};
+use scap_direct3d::{Capturer, Frame, PixelFormat, Settings};
 #[cfg(target_os = "macos")]
 use scap_screencapturekit::{Capturer, StreamCfgBuilder};
 #[cfg(target_os = "windows")]
@@ -1411,7 +1411,11 @@ pub async fn capture_screenshot(target: ScreenCaptureTarget) -> anyhow::Result<D
 
     #[cfg(target_os = "windows")]
     {
-        if !windows_fast_path_available() {
+        // Lets a PC where Windows Graphics Capture works take the route of
+        // one that refuses it, like recording does.
+        let graphics_capture_disabled = std::env::var("SAYPLAY_CAPTURE_BACKEND")
+            .is_ok_and(|value| value.trim().eq_ignore_ascii_case("duplication"));
+        if !windows_fast_path_available() || graphics_capture_disabled {
             let fallback_image = gdi_or_error(
                 &target,
                 anyhow!("Windows.Graphics.Capture not supported on this system"),
@@ -1616,18 +1620,14 @@ pub async fn capture_screenshot(target: ScreenCaptureTarget) -> anyhow::Result<D
             shared_d3d_device().ok().cloned(),
         ) {
             Ok(capturer) => capturer,
-            Err(
-                e @ NewCapturerError::NotSupported
-                | e @ NewCapturerError::CreateDevice(_)
-                | e @ NewCapturerError::Direct3DDevice(_)
-                | e @ NewCapturerError::Context(_),
-            ) => {
+            // Includes Windows refusing the capture session (E_ACCESSDENIED),
+            // which GDI is not subject to.
+            Err(e) => {
                 let fallback_image =
                     gdi_or_error(&target, anyhow!("Failed to create capturer: {e:?}"))?;
                 return crop_area_if_needed(fallback_image, &target, false)
                     .map(|img| finalize_screenshot(img, &target));
             }
-            Err(e) => return Err(anyhow!("Failed to create capturer: {e:?}")),
         }
     };
 

@@ -1,7 +1,9 @@
 #![cfg(windows)]
 
+mod duplication;
 mod windows_version;
 
+pub use duplication::{DuplicationCapturer, DuplicationPath, NewDuplicationError};
 pub use windows_version::WindowsVersion;
 
 use std::{
@@ -333,6 +335,7 @@ fn create_copy_texture(
     width: u32,
     height: u32,
     pixel_format: PixelFormat,
+    extra_bind_flags: u32,
 ) -> windows::core::Result<ID3D11Texture2D> {
     let desc = D3D11_TEXTURE2D_DESC {
         Width: width,
@@ -345,7 +348,8 @@ fn create_copy_texture(
             Quality: 0,
         },
         Usage: D3D11_USAGE_DEFAULT,
-        BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+        BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32
+            | extra_bind_flags,
         CPUAccessFlags: 0,
         MiscFlags: 0,
     };
@@ -361,12 +365,21 @@ fn create_copy_texture(
 #[derive(Default)]
 struct TrimPool {
     free: Mutex<Vec<(ID3D11Texture2D, u32, u32)>>,
+    /// Added to every texture's render-target and shader-resource binding.
+    extra_bind_flags: u32,
 }
 
 /// Enough for frames waiting on the encoder; more are dropped when returned.
 const TRIM_POOL_SIZE: usize = 8;
 
 impl TrimPool {
+    fn with_bind_flags(extra_bind_flags: u32) -> Self {
+        Self {
+            free: Mutex::default(),
+            extra_bind_flags,
+        }
+    }
+
     fn take(
         &self,
         d3d_device: &ID3D11Device,
@@ -384,7 +397,13 @@ impl TrimPool {
         };
         match reused {
             Some((texture, _, _)) => Ok(texture),
-            None => create_copy_texture(d3d_device, width, height, pixel_format),
+            None => create_copy_texture(
+                d3d_device,
+                width,
+                height,
+                pixel_format,
+                self.extra_bind_flags,
+            ),
         }
     }
 
@@ -627,6 +646,7 @@ impl Capturer {
                     crop.right - crop.left,
                     crop.bottom - crop.top,
                     settings.pixel_format,
+                    0,
                 )
                 .map_err(NewCapturerError::CropTexture)?;
 
@@ -665,6 +685,7 @@ impl Capturer {
 
                         let frame = frame_pool.TryGetNextFrame()?;
 
+                        let capture_time = frame.SystemRelativeTime()?.Duration;
                         let size = frame.ContentSize()?;
 
                         // The item can change size mid-capture (a recorded
@@ -767,7 +788,8 @@ impl Capturer {
                                 width: crop.right - crop.left,
                                 height: crop.bottom - crop.top,
                                 pixel_format: settings.pixel_format,
-                                inner: frame,
+                                inner: Some(frame),
+                                capture_time,
                                 texture: cropped_texture,
                                 d3d_context: d3d_context.clone(),
                                 d3d_device: d3d_device.clone(),
@@ -798,7 +820,8 @@ impl Capturer {
                                     width,
                                     height,
                                     pixel_format: settings.pixel_format,
-                                    inner: frame,
+                                    inner: Some(frame),
+                                capture_time,
                                     texture,
                                     d3d_context: d3d_context.clone(),
                                     d3d_device: d3d_device.clone(),
@@ -833,7 +856,8 @@ impl Capturer {
                                     width,
                                     height,
                                     pixel_format: settings.pixel_format,
-                                    inner: frame,
+                                    inner: Some(frame),
+                                capture_time,
                                     texture: trimmed_texture,
                                     d3d_context: d3d_context.clone(),
                                     d3d_device: d3d_device.clone(),
@@ -934,7 +958,9 @@ pub struct Frame {
     width: u32,
     height: u32,
     pixel_format: PixelFormat,
-    inner: Direct3D11CaptureFrame,
+    /// `None` for frames from [`DuplicationCapturer`].
+    inner: Option<Direct3D11CaptureFrame>,
+    capture_time: i64,
     texture: ID3D11Texture2D,
     d3d_device: ID3D11Device,
     d3d_context: ID3D11DeviceContext,
@@ -973,8 +999,16 @@ impl Frame {
         self.pixel_format
     }
 
-    pub fn inner(&self) -> &Direct3D11CaptureFrame {
-        &self.inner
+    /// The Windows Graphics Capture frame; `None` for frames from
+    /// [`DuplicationCapturer`].
+    pub fn inner(&self) -> Option<&Direct3D11CaptureFrame> {
+        self.inner.as_ref()
+    }
+
+    /// When the frame was captured: performance-counter time in 100 ns
+    /// units, WGC's `SystemRelativeTime`.
+    pub fn capture_time(&self) -> i64 {
+        self.capture_time
     }
 
     pub fn texture(&self) -> &ID3D11Texture2D {

@@ -92,7 +92,9 @@ mod win {
                 {
                     let frame_tx = frame_tx.clone();
                     move |frame| {
-                        let frame_time = frame.inner().SystemRelativeTime()?;
+                        let frame_time = TimeSpan {
+                            Duration: frame.capture_time(),
+                        };
 
                         let first_time = first_time.get_or_insert(frame_time);
                         let timestamp = TimeSpan {

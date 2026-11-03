@@ -446,6 +446,7 @@ impl ScreenCaptureConfig<Direct3DCapture> {
                 display_id: self.config.display.clone(),
                 window_id: self.config.window.clone(),
                 settings,
+                show_cursor: self.config.show_cursor,
                 d3d_device: self.d3d_device.clone(),
             },
             self.system_audio.then_some(SystemAudioSourceConfig),
@@ -464,6 +465,7 @@ pub struct VideoSourceConfig {
     display_id: DisplayId,
     window_id: Option<WindowId>,
     settings: scap_direct3d::Settings,
+    show_cursor: bool,
     pub d3d_device: ID3D11Device,
 }
 pub struct VideoSource {
@@ -536,6 +538,7 @@ struct CreateCapturerParams<'a> {
     display_id: &'a DisplayId,
     window_id: Option<&'a WindowId>,
     settings: &'a scap_direct3d::Settings,
+    show_cursor: bool,
     d3d_device: &'a ID3D11Device,
     video_tx: &'a mpsc::Sender<VideoFrame>,
     video_frame_counter: &'a Arc<AtomicU32>,
@@ -555,6 +558,156 @@ struct CreateCapturerParams<'a> {
     first_frame: FirstScreenFrame,
 }
 
+/// Which Windows API records the screen. Windows Graphics Capture is tried
+/// first; some PCs refuse it (policy, security software) while still allowing
+/// Desktop Duplication, which records whole displays and areas but not single
+/// windows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CaptureBackend {
+    Graphics,
+    Duplication,
+}
+
+/// `SAYPLAY_CAPTURE_BACKEND=duplication` forces Desktop Duplication and
+/// `=wgc` disables the fallback, for testing either path on a PC where both work.
+fn capture_backend_override() -> Option<CaptureBackend> {
+    let value = std::env::var("SAYPLAY_CAPTURE_BACKEND").ok()?;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "duplication" | "dxgi" => Some(CaptureBackend::Duplication),
+        "wgc" | "graphics" => Some(CaptureBackend::Graphics),
+        _ => None,
+    }
+}
+
+enum ScreenCapturer {
+    Graphics(scap_direct3d::Capturer),
+    Duplication(scap_direct3d::DuplicationCapturer),
+}
+
+impl ScreenCapturer {
+    fn start(&mut self) -> windows::core::Result<()> {
+        match self {
+            Self::Graphics(capturer) => capturer.start(),
+            Self::Duplication(capturer) => capturer.start(),
+        }
+    }
+
+    fn stop(&mut self) -> windows::core::Result<()> {
+        match self {
+            Self::Graphics(capturer) => capturer.stop(),
+            Self::Duplication(capturer) => capturer.stop(),
+        }
+    }
+}
+
+fn is_access_denied(error: &windows::core::Error) -> bool {
+    error.code() == windows::Win32::Foundation::E_ACCESSDENIED
+}
+
+const WINDOW_CAPTURE_DENIED: &str = "Windows doesn't allow SayPlay to record a single window on this computer. Choose Full screen or Area instead.";
+
+/// Creates the capturer for `backend`. When `allow_fallback` is set and
+/// Windows Graphics Capture fails, Desktop Duplication is used instead and
+/// `backend` switches to it, so later restarts go straight there.
+fn create_screen_capturer(
+    params: &CreateCapturerParams,
+    error_tx: &mpsc::Sender<CaptureClosureEvent>,
+    backend: &mut CaptureBackend,
+    allow_fallback: bool,
+) -> anyhow::Result<ScreenCapturer> {
+    let graphics_error = match *backend {
+        CaptureBackend::Duplication => None,
+        CaptureBackend::Graphics => match create_d3d_capturer(params, error_tx) {
+            Ok(capturer) => return Ok(ScreenCapturer::Graphics(capturer)),
+            Err(error) if allow_fallback => {
+                warn!(error = %error, "Windows Graphics Capture unavailable, switching to Desktop Duplication");
+                Some(error)
+            }
+            Err(error) => return Err(error),
+        },
+    };
+    *backend = CaptureBackend::Duplication;
+    create_duplication_capturer(params, error_tx)
+        .map(ScreenCapturer::Duplication)
+        .map_err(|error| combine_capture_errors(graphics_error, error))
+}
+
+/// Starts `capturer`, moving to Desktop Duplication like
+/// `create_screen_capturer` when Windows Graphics Capture refuses to start.
+fn start_screen_capturer(
+    capturer: &mut ScreenCapturer,
+    params: &CreateCapturerParams,
+    error_tx: &mpsc::Sender<CaptureClosureEvent>,
+    backend: &mut CaptureBackend,
+    allow_fallback: bool,
+) -> anyhow::Result<()> {
+    let error = match capturer.start() {
+        Ok(()) => return Ok(()),
+        Err(error) => error,
+    };
+    if !allow_fallback || !matches!(capturer, ScreenCapturer::Graphics(_)) {
+        return Err(start_error(params, error));
+    }
+    warn!(error = %error, "Windows Graphics Capture failed to start, switching to Desktop Duplication");
+    let _ = capturer.stop();
+    let graphics_error = start_error(params, error);
+    *backend = CaptureBackend::Duplication;
+    let mut duplication = create_duplication_capturer(params, error_tx)
+        .map_err(|error| combine_capture_errors(Some(graphics_error), error))?;
+    duplication
+        .start()
+        .map_err(|error| anyhow!("Desktop Duplication failed to start: {error}"))?;
+    *capturer = ScreenCapturer::Duplication(duplication);
+    Ok(())
+}
+
+fn start_error(params: &CreateCapturerParams, error: windows::core::Error) -> anyhow::Error {
+    if params.window_id.is_some() && is_access_denied(&error) {
+        anyhow!("{WINDOW_CAPTURE_DENIED} ({error})")
+    } else {
+        anyhow!("{error}")
+    }
+}
+
+fn combine_capture_errors(
+    graphics_error: Option<anyhow::Error>,
+    duplication_error: anyhow::Error,
+) -> anyhow::Error {
+    match graphics_error {
+        Some(graphics_error) => anyhow!(
+            "{graphics_error:#} Desktop Duplication could not record either: {duplication_error:#}"
+        ),
+        None => duplication_error,
+    }
+}
+
+fn create_duplication_capturer(
+    params: &CreateCapturerParams,
+    error_tx: &mpsc::Sender<CaptureClosureEvent>,
+) -> anyhow::Result<scap_direct3d::DuplicationCapturer> {
+    if params.window_id.is_some() {
+        return Err(anyhow!(WINDOW_CAPTURE_DENIED));
+    }
+    let monitor = Display::from_id(params.display_id)
+        .ok_or_else(|| anyhow!("Display not found for ID: {:?}", params.display_id))?
+        .raw_handle()
+        .inner();
+    let mut settings = params.settings.clone();
+    // WGC leaves this unset where Windows lacks the switch; Desktop
+    // Duplication always honours the recording's choice.
+    settings.is_cursor_capture_enabled = Some(params.show_cursor);
+    let capturer = scap_direct3d::DuplicationCapturer::new(
+        monitor,
+        settings,
+        frame_callback(params),
+        closed_callback(params, error_tx),
+        Some(params.d3d_device.clone()),
+    )
+    .map_err(|error| anyhow!("Desktop Duplication: {error}"))?;
+    info!(path = ?capturer.path(), "Windows screen capture using Desktop Duplication");
+    Ok(capturer)
+}
+
 fn create_d3d_capturer(
     params: &CreateCapturerParams,
     error_tx: &mpsc::Sender<CaptureClosureEvent>,
@@ -567,7 +720,13 @@ fn create_d3d_capturer(
             .ok_or_else(|| anyhow!("Window not found for ID: {:?}", window_id))?
             .raw_handle()
             .try_as_capture_item()
-            .map_err(|e| anyhow!("Failed to create window GraphicsCaptureItem: {}", e))?,
+            .map_err(|e| {
+                if is_access_denied(&e) {
+                    anyhow!("{WINDOW_CAPTURE_DENIED} ({e})")
+                } else {
+                    anyhow!("Failed to create window GraphicsCaptureItem: {}", e)
+                }
+            })?,
         None => Display::from_id(params.display_id)
             .ok_or_else(|| anyhow!("Display not found for ID: {:?}", params.display_id))?
             .raw_handle()
@@ -575,149 +734,163 @@ fn create_d3d_capturer(
             .map_err(|e| anyhow!("Failed to create GraphicsCaptureItem: {}", e))?,
     };
 
-    scap_direct3d::Capturer::new(
+    let capturer = scap_direct3d::Capturer::new(
         capture_item,
         params.settings.clone(),
-        {
-            let video_frame_counter = params.video_frame_counter.clone();
-            let video_drop_counter = params.video_drop_counter.clone();
-            let video_decimated_counter = params.video_decimated_counter.clone();
-            let mut cadence_gate = params.cadence_interval_hns.map(FrameCadenceGate::new);
-            let mut tx = params.video_tx.clone();
-            let expected_width = params.expected_width;
-            let expected_height = params.expected_height;
-            let frame_scaler = params.frame_scaler.clone();
-            let scaling_logged = params.scaling_logged.clone();
-            let scaled_frame_count = params.scaled_frame_count.clone();
-            let stall_health_tx = params.stall_health_tx.clone();
-            let first_frame = params.first_frame.clone();
-            move |frame| {
-                let result = (|| {
-                let capture_time = frame.inner().SystemRelativeTime()?;
-                if frame.width() == 0 || frame.height() == 0 {
-                    return Err(windows::core::Error::new(windows::Win32::Foundation::E_INVALIDARG, "Empty screen frame"));
-                }
-
-                // WGC delivers a frame per screen update — up to the monitor
-                // refresh rate on systems without MinUpdateInterval support —
-                // so cap delivery at the nominal rate before any conversion
-                // or channel work.
-                if let Some(gate) = cadence_gate.as_mut()
-                    && !gate.admit(capture_time.Duration)
-                {
-                    video_decimated_counter.fetch_add(1, atomic::Ordering::Relaxed);
-                    return Ok(());
-                }
-
-                let timestamp = Timestamp::PerformanceCounter(
-                    PerformanceCounterTimestamp::from_100ns(capture_time.Duration),
-                );
-
-                let frame_width = frame.width();
-                let frame_height = frame.height();
-
-                let screen_frame =
-                    if frame_width != expected_width || frame_height != expected_height {
-                        let Ok(mut scaler_guard) = frame_scaler.lock() else {
-                            video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
-                            return Ok(());
-                        };
-
-                        if !scaling_logged.load(atomic::Ordering::Relaxed) {
-                            info!(
-                                expected_width,
-                                expected_height,
-                                frame_width,
-                                frame_height,
-                                "Display resolution changed, scaling frames to match original dimensions"
-                            );
-                            scaling_logged.store(true, atomic::Ordering::Relaxed);
-                        }
-
-                        match scaler_guard.scale_frame(&frame) {
-                            Some(scaled) => {
-                                let count =
-                                    scaled_frame_count.fetch_add(1, atomic::Ordering::Relaxed) + 1;
-                                if count.is_multiple_of(300) {
-                                    debug!(scaled_frames = count, "Scaling frames");
-                                }
-                                scaled
-                            }
-                            None => {
-                                video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
-                                return Ok(());
-                            }
-                        }
-                    } else {
-                        if scaling_logged.swap(false, atomic::Ordering::Relaxed) {
-                            let count = scaled_frame_count.swap(0, atomic::Ordering::Relaxed);
-                            info!(
-                                scaled_frames = count,
-                                "Display dimensions restored, resuming direct capture"
-                            );
-                            if let Ok(mut guard) = frame_scaler.lock() {
-                                guard.state = None;
-                            }
-                        }
-                        ScreenFrame::Captured(frame)
-                    };
-
-                match output_pipeline::send_with_stall_budget_futures(
-                    &mut tx,
-                    VideoFrame {
-                        frame: screen_frame,
-                        timestamp,
-                    },
-                    "screen-video",
-                    &stall_health_tx,
-                ) {
-                    output_pipeline::StallSendOutcome::Sent => {
-                        video_frame_counter.fetch_add(1, atomic::Ordering::Relaxed);
-                        first_frame.complete(Ok(()));
-                    }
-                    output_pipeline::StallSendOutcome::StalledAndDropped { .. }
-                    | output_pipeline::StallSendOutcome::Disconnected => {
-                        video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
-                    }
-                }
-                Ok(())
-                })();
-                if let Err(error) = &result {
-                    first_frame.complete(Err(format!("Windows first screen frame failed: {error}")));
-                }
-                result
-            }
-        },
-        {
-            let first_frame = params.first_frame.clone();
-            let mut err_tx = error_tx.clone();
-            let device_for_callback = params.d3d_device.clone();
-            move || {
-                let kind = classify_capture_closure(&device_for_callback);
-                let message = match kind {
-                    CaptureClosureKind::DeviceRemoved { hresult } => {
-                        format!("d3d11 device removed (hresult=0x{hresult:08x})")
-                    }
-                    CaptureClosureKind::TargetLost => "capture target lost".to_string(),
-                    CaptureClosureKind::Transient => "capture closed".to_string(),
-                };
-                first_frame.complete(Err(message.clone()));
-                drop(err_tx.try_send(CaptureClosureEvent { kind, message }));
-                Ok(())
-            }
-        },
+        frame_callback(params),
+        closed_callback(params, error_tx),
         Some(params.d3d_device.clone()),
     )
     .map_err(|error| match &error {
-        scap_direct3d::NewCapturerError::CaptureSession(inner)
-            if inner.code() == windows::Win32::Foundation::E_ACCESSDENIED =>
-        {
-            anyhow!(
-                "Windows denied Cap access to screen capture. Check that screen capture is allowed for desktop apps in Windows privacy settings and that no security software is blocking it ({error})"
-            )
+        scap_direct3d::NewCapturerError::CaptureSession(inner) if is_access_denied(inner) => {
+            if params.window_id.is_some() {
+                anyhow!("{WINDOW_CAPTURE_DENIED} ({error})")
+            } else {
+                anyhow!(
+                    "Windows denied SayPlay access to screen capture. Check that screen capture is allowed for desktop apps in Windows privacy settings and that no security software is blocking it ({error})"
+                )
+            }
         }
         _ => anyhow!("{error}"),
-    })
+    })?;
+    info!("Windows screen capture using Windows Graphics Capture");
+    Ok(capturer)
+}
+
+fn frame_callback(
+    params: &CreateCapturerParams,
+) -> impl FnMut(scap_direct3d::Frame) -> windows::core::Result<()> + Send + 'static {
+    let video_frame_counter = params.video_frame_counter.clone();
+    let video_drop_counter = params.video_drop_counter.clone();
+    let video_decimated_counter = params.video_decimated_counter.clone();
+    let mut cadence_gate = params.cadence_interval_hns.map(FrameCadenceGate::new);
+    let mut tx = params.video_tx.clone();
+    let expected_width = params.expected_width;
+    let expected_height = params.expected_height;
+    let frame_scaler = params.frame_scaler.clone();
+    let scaling_logged = params.scaling_logged.clone();
+    let scaled_frame_count = params.scaled_frame_count.clone();
+    let stall_health_tx = params.stall_health_tx.clone();
+    let first_frame = params.first_frame.clone();
+    move |frame| {
+        let result = (|| {
+            let capture_time = frame.capture_time();
+            if frame.width() == 0 || frame.height() == 0 {
+                return Err(windows::core::Error::new(
+                    windows::Win32::Foundation::E_INVALIDARG,
+                    "Empty screen frame",
+                ));
+            }
+
+            // WGC delivers a frame per screen update — up to the monitor
+            // refresh rate on systems without MinUpdateInterval support —
+            // so cap delivery at the nominal rate before any conversion
+            // or channel work.
+            if let Some(gate) = cadence_gate.as_mut()
+                && !gate.admit(capture_time)
+            {
+                video_decimated_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                return Ok(());
+            }
+
+            let timestamp = Timestamp::PerformanceCounter(PerformanceCounterTimestamp::from_100ns(
+                capture_time,
+            ));
+
+            let frame_width = frame.width();
+            let frame_height = frame.height();
+
+            let screen_frame = if frame_width != expected_width || frame_height != expected_height {
+                let Ok(mut scaler_guard) = frame_scaler.lock() else {
+                    video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                    return Ok(());
+                };
+
+                if !scaling_logged.load(atomic::Ordering::Relaxed) {
+                    info!(
+                        expected_width,
+                        expected_height,
+                        frame_width,
+                        frame_height,
+                        "Display resolution changed, scaling frames to match original dimensions"
+                    );
+                    scaling_logged.store(true, atomic::Ordering::Relaxed);
+                }
+
+                match scaler_guard.scale_frame(&frame) {
+                    Some(scaled) => {
+                        let count = scaled_frame_count.fetch_add(1, atomic::Ordering::Relaxed) + 1;
+                        if count.is_multiple_of(300) {
+                            debug!(scaled_frames = count, "Scaling frames");
+                        }
+                        scaled
+                    }
+                    None => {
+                        video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                        return Ok(());
+                    }
+                }
+            } else {
+                if scaling_logged.swap(false, atomic::Ordering::Relaxed) {
+                    let count = scaled_frame_count.swap(0, atomic::Ordering::Relaxed);
+                    info!(
+                        scaled_frames = count,
+                        "Display dimensions restored, resuming direct capture"
+                    );
+                    if let Ok(mut guard) = frame_scaler.lock() {
+                        guard.state = None;
+                    }
+                }
+                ScreenFrame::Captured(frame)
+            };
+
+            match output_pipeline::send_with_stall_budget_futures(
+                &mut tx,
+                VideoFrame {
+                    frame: screen_frame,
+                    timestamp,
+                },
+                "screen-video",
+                &stall_health_tx,
+            ) {
+                output_pipeline::StallSendOutcome::Sent => {
+                    video_frame_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                    first_frame.complete(Ok(()));
+                }
+                output_pipeline::StallSendOutcome::StalledAndDropped { .. }
+                | output_pipeline::StallSendOutcome::Disconnected => {
+                    video_drop_counter.fetch_add(1, atomic::Ordering::Relaxed);
+                }
+            }
+            Ok(())
+        })();
+        if let Err(error) = &result {
+            first_frame.complete(Err(format!("Windows first screen frame failed: {error}")));
+        }
+        result
+    }
+}
+
+fn closed_callback(
+    params: &CreateCapturerParams,
+    error_tx: &mpsc::Sender<CaptureClosureEvent>,
+) -> impl FnMut() -> windows::core::Result<()> + Send + 'static {
+    let first_frame = params.first_frame.clone();
+    let mut err_tx = error_tx.clone();
+    let device_for_callback = params.d3d_device.clone();
+    move || {
+        let kind = classify_capture_closure(&device_for_callback);
+        let message = match kind {
+            CaptureClosureKind::DeviceRemoved { hresult } => {
+                format!("d3d11 device removed (hresult=0x{hresult:08x})")
+            }
+            CaptureClosureKind::TargetLost => "capture target lost".to_string(),
+            CaptureClosureKind::Transient => "capture closed".to_string(),
+        };
+        first_frame.complete(Err(message.clone()));
+        drop(err_tx.try_send(CaptureClosureEvent { kind, message }));
+        Ok(())
+    }
 }
 
 impl output_pipeline::VideoSource for VideoSource {
@@ -730,6 +903,7 @@ impl output_pipeline::VideoSource for VideoSource {
             display_id,
             window_id,
             settings,
+            show_cursor,
             d3d_device,
         }: Self::Config,
         video_tx: mpsc::Sender<Self::Frame>,
@@ -787,12 +961,25 @@ impl output_pipeline::VideoSource for VideoSource {
                 let mut error_tx = error_tx;
                 let mut d3d_device = d3d_device;
 
+                let backend_override = capture_backend_override();
+                if let Some(backend) = backend_override {
+                    info!(?backend, "Windows capture backend forced via SAYPLAY_CAPTURE_BACKEND");
+                }
+                // Desktop Duplication can't isolate a window, and a forced
+                // backend is never swapped for the other.
+                let allow_fallback = backend_override.is_none() && window_id.is_none();
+                let mut backend = match (backend_override, &window_id) {
+                    (Some(CaptureBackend::Duplication), None) => CaptureBackend::Duplication,
+                    _ => CaptureBackend::Graphics,
+                };
+
                 macro_rules! build_params {
                     ($device:expr) => {
                         CreateCapturerParams {
                             display_id: &display_id,
                             window_id: window_id.as_ref(),
                             settings: &settings,
+                            show_cursor,
                             d3d_device: $device,
                             video_tx: &video_tx,
                             video_frame_counter: &video_frame_counter,
@@ -810,7 +997,12 @@ impl output_pipeline::VideoSource for VideoSource {
                     };
                 }
 
-                let mut capturer = match create_d3d_capturer(&build_params!(&d3d_device), &error_tx) {
+                let mut capturer = match create_screen_capturer(
+                    &build_params!(&d3d_device),
+                    &error_tx,
+                    &mut backend,
+                    allow_fallback,
+                ) {
                     Ok(c) => {
                         trace!("D3D capturer created successfully");
                         Some(c)
@@ -892,7 +1084,15 @@ impl output_pipeline::VideoSource for VideoSource {
                 trace!("Starting D3D capturer");
                 let start_result = capturer
                     .as_mut()
-                    .map(|c| c.start().map_err(Into::into))
+                    .map(|c| {
+                        start_screen_capturer(
+                            c,
+                            &build_params!(&d3d_device),
+                            &error_tx,
+                            &mut backend,
+                            allow_fallback,
+                        )
+                    })
                     .unwrap_or(Err(anyhow!("No capturer available")));
                 if let Err(ref e) = start_result {
                     error!("Failed to start D3D capturer: {}", e);
@@ -932,8 +1132,19 @@ impl output_pipeline::VideoSource for VideoSource {
                                     continue;
                                 }
                             }
-                            match create_d3d_capturer(&build_params!(&d3d_device), &error_tx) {
-                                Ok(mut new_cap) => match new_cap.start() {
+                            match create_screen_capturer(
+                                &build_params!(&d3d_device),
+                                &error_tx,
+                                &mut backend,
+                                allow_fallback,
+                            ) {
+                                Ok(mut new_cap) => match start_screen_capturer(
+                                    &mut new_cap,
+                                    &build_params!(&d3d_device),
+                                    &error_tx,
+                                    &mut backend,
+                                    allow_fallback,
+                                ) {
                                     Ok(()) => {
                                         info!(
                                             "Windows screen capture resumed after device recreation"
@@ -972,8 +1183,19 @@ impl output_pipeline::VideoSource for VideoSource {
                                 drop(old);
                             }
 
-                            match create_d3d_capturer(&build_params!(&d3d_device), &error_tx) {
-                                Ok(mut new_cap) => match new_cap.start() {
+                            match create_screen_capturer(
+                                &build_params!(&d3d_device),
+                                &error_tx,
+                                &mut backend,
+                                allow_fallback,
+                            ) {
+                                Ok(mut new_cap) => match start_screen_capturer(
+                                    &mut new_cap,
+                                    &build_params!(&d3d_device),
+                                    &error_tx,
+                                    &mut backend,
+                                    allow_fallback,
+                                ) {
                                     Ok(()) => {
                                         let count = restart_counter
                                             .fetch_add(1, atomic::Ordering::Relaxed)
