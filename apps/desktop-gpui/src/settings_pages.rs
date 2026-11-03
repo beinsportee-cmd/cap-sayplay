@@ -4077,7 +4077,7 @@ impl SettingsWindow {
                                         ui::ButtonSize::Sm,
                                     )
                                     .label(tr::settings::license::view_pricing())
-                                    .on_click(|_, _, cx| crate::sayplay::open_pricing!(cx))),
+                                    .on_click(|_, _, cx| crate::sayplay::open_pricing!(cx)),
                                 )
                                 .child(
                                     div()
@@ -4610,7 +4610,9 @@ impl SettingsWindow {
                             this.gdrive_wait_for_connection(window, cx);
                         }
                     }
-                    Ok((403, _)) => crate::sayplay::open_pricing!(cx)),
+                    Ok((403, _)) => {
+                        crate::sayplay::open_pricing!(cx);
+                    }
                     Ok(_) => {
                         this.pages.gdrive.error =
                             Some(tr::settings::integrations::gdrive::connect_failed().to_string())
