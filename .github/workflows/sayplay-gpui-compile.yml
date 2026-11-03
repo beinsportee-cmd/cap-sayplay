@@ -98,7 +98,6 @@ jobs:
 
       - name: Unit tests (camera frame conversion)
         shell: bash
-        working-directory: apps/desktop-gpui
         run: |
           unset VCINSTALLDIR
           export PATH="$GITHUB_WORKSPACE/target/ffmpeg/bin:$PATH"
