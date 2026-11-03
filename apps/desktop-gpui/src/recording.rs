@@ -451,6 +451,7 @@ async fn finalize_studio(
             None => RecoveryManager::remux_if_needed(&project_path),
         };
         result.map_err(anyhow::Error::from)?;
+        apply_default_preset_to_project_config(&project_path);
         let placement = completed
             .meta
             .camera_path()
@@ -1804,6 +1805,37 @@ fn enable_notch_overlay(project_path: &std::path::Path) -> std::io::Result<()> {
         let _ = std::fs::remove_file(temp);
     }
     result
+}
+
+/// The editor's Default preset as a new studio project's look, the way the
+/// Tauri app starts `project_config_from_recording` from it. Runs before the
+/// camera, background and audio bridges so the choices made for this
+/// recording still win.
+fn apply_default_preset_to_project_config(project_dir: &std::path::Path) -> bool {
+    let presets = crate::presets::PresetsStore::load();
+    let Some(preset) = presets
+        .default
+        .and_then(|index| presets.presets.get(index))
+    else {
+        return false;
+    };
+    let current = match ProjectConfiguration::load(project_dir) {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::warn!(%error, "no project config to apply the default preset to");
+            return false;
+        }
+    };
+    let Some(next) = crate::presets::apply_preset(&preset.config, &current) else {
+        tracing::warn!("the default preset no longer deserializes; not applied");
+        return false;
+    };
+    if let Err(error) = next.write(project_dir) {
+        tracing::warn!(%error, "could not apply the default preset");
+        return false;
+    }
+    tracing::info!("applied the default preset to the new recording");
+    true
 }
 
 fn apply_animated_gradient_to_project_config(

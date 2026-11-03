@@ -25,7 +25,7 @@ fn bundled_wallpaper_id(path: &str) -> Option<&'static str> {
     crate::editor_sidebar::wallpaper_id_for_path(&path.replace('\\', "/"))
 }
 
-fn local_wallpaper(path: &str) -> Option<String> {
+pub(crate) fn local_wallpaper(path: &str) -> Option<String> {
     let path = crate::editor_sidebar::wallpaper_path(bundled_wallpaper_id(path)?)?;
     Some(path.to_string_lossy().into_owned())
 }

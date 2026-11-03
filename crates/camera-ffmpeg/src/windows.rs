@@ -18,6 +18,14 @@ pub enum AsFFmpegError {
     H264DecodeError(String),
     #[error("H264 decoder needs more data (non-fatal)")]
     H264NeedMoreData,
+    #[error("Frame buffer holds {actual} bytes, {expected} needed")]
+    ShortBuffer { expected: usize, actual: usize },
+    #[error("Could not allocate a {width}x{height} {format:?} frame")]
+    Allocation {
+        format: Pixel,
+        width: usize,
+        height: usize,
+    },
 }
 
 struct MjpegDecoder {
@@ -229,6 +237,42 @@ fn src_y(y: usize, height: usize, is_bottom_up: bool) -> usize {
     if is_bottom_up { height - y - 1 } else { y }
 }
 
+/// The bytes the copy loops in [`CapturedFrameExt::as_ffmpeg`] read for a
+/// raw frame; 0 for the compressed formats, which go through a decoder.
+fn required_len(format: PixelFormat, width: usize, height: usize) -> usize {
+    let area = width.saturating_mul(height);
+    let quarter = (width / 2).saturating_mul(height / 2);
+    let half_rows = (height / 2).saturating_mul(width);
+    match format {
+        PixelFormat::YUV420P => area.saturating_add(area / 4).saturating_add(quarter),
+        PixelFormat::YV12 => area.saturating_add(quarter.saturating_mul(2)),
+        PixelFormat::NV12 | PixelFormat::NV21 => area.saturating_add(half_rows),
+        PixelFormat::P010 => area.saturating_add(half_rows).saturating_mul(2),
+        PixelFormat::ARGB | PixelFormat::RGB32 => area.saturating_mul(4),
+        PixelFormat::RGB24 | PixelFormat::BGR24 => area.saturating_mul(3),
+        PixelFormat::YUYV422 | PixelFormat::UYVY422 | PixelFormat::GRAY16 | PixelFormat::RGB565 => {
+            area.saturating_mul(2)
+        }
+        PixelFormat::GRAY8 => area,
+        PixelFormat::MJPEG | PixelFormat::H264 => 0,
+    }
+}
+
+/// `FFVideo::new` ignores a failed allocation and returns a frame without
+/// planes, whose first `stride` call panics -- on a Media Foundation thread,
+/// where a panic can't unwind and aborts the app.
+fn alloc_frame(format: Pixel, width: usize, height: usize) -> Result<FFVideo, AsFFmpegError> {
+    let frame = FFVideo::new(format, width as u32, height as u32);
+    if frame.planes() == 0 {
+        return Err(AsFFmpegError::Allocation {
+            format,
+            width,
+            height,
+        });
+    }
+    Ok(frame)
+}
+
 impl CapturedFrameExt for CapturedFrame {
     fn as_ffmpeg(&self) -> Result<ffmpeg::frame::Video, AsFFmpegError> {
         let native = self.native();
@@ -246,9 +290,17 @@ impl CapturedFrameExt for CapturedFrame {
             return Err(AsFFmpegError::Empty);
         }
 
+        let expected = required_len(native.pixel_format, width, height);
+        if bytes.len() < expected {
+            return Err(AsFFmpegError::ShortBuffer {
+                expected,
+                actual: bytes.len(),
+            });
+        }
+
         Ok(match native.pixel_format {
             PixelFormat::YUV420P => {
-                let mut ff_frame = FFVideo::new(Pixel::YUV420P, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::YUV420P, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -281,7 +333,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::NV12 => {
-                let mut ff_frame = FFVideo::new(Pixel::NV12, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::NV12, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -303,7 +355,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::ARGB => {
-                let mut ff_frame = FFVideo::new(Pixel::BGRA, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::BGRA, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -316,7 +368,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::RGB24 => {
-                let mut ff_frame = FFVideo::new(Pixel::BGR24, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::BGR24, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 let src_stride = width * 3;
@@ -329,7 +381,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::RGB32 => {
-                let mut ff_frame = FFVideo::new(Pixel::BGRA, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::BGRA, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -342,7 +394,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::YUYV422 => {
-                let mut ff_frame = FFVideo::new(Pixel::YUYV422, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::YUYV422, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -355,7 +407,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::UYVY422 => {
-                let mut ff_frame = FFVideo::new(Pixel::UYVY422, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::UYVY422, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -369,7 +421,7 @@ impl CapturedFrameExt for CapturedFrame {
             }
             PixelFormat::MJPEG => decode_mjpeg(&bytes)?,
             PixelFormat::YV12 => {
-                let mut ff_frame = FFVideo::new(Pixel::YUV420P, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::YUV420P, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -399,7 +451,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::BGR24 => {
-                let mut ff_frame = FFVideo::new(Pixel::BGR24, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::BGR24, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 let src_stride = width * 3;
@@ -412,7 +464,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::GRAY8 => {
-                let mut ff_frame = FFVideo::new(Pixel::GRAY8, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::GRAY8, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -425,7 +477,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::GRAY16 => {
-                let mut ff_frame = FFVideo::new(Pixel::GRAY16LE, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::GRAY16LE, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 let src_stride = width * 2;
@@ -438,7 +490,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::NV21 => {
-                let mut ff_frame = FFVideo::new(Pixel::NV12, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::NV12, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 for y in 0..height {
@@ -464,7 +516,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::RGB565 => {
-                let mut ff_frame = FFVideo::new(Pixel::RGB565LE, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::RGB565LE, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 let src_stride = width * 2;
@@ -477,7 +529,7 @@ impl CapturedFrameExt for CapturedFrame {
                 ff_frame
             }
             PixelFormat::P010 => {
-                let mut ff_frame = FFVideo::new(Pixel::P010LE, width as u32, height as u32);
+                let mut ff_frame = alloc_frame(Pixel::P010LE, width, height)?;
 
                 let stride = ff_frame.stride(0);
                 let src_stride = width * 2;
@@ -503,5 +555,32 @@ impl CapturedFrameExt for CapturedFrame {
             }
             PixelFormat::H264 => decode_h264(&bytes)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn required_len_covers_every_plane() {
+        let (w, h) = (1280, 720);
+        assert_eq!(required_len(PixelFormat::YUV420P, w, h), w * h * 3 / 2);
+        assert_eq!(required_len(PixelFormat::YV12, w, h), w * h * 3 / 2);
+        assert_eq!(required_len(PixelFormat::NV12, w, h), w * h * 3 / 2);
+        assert_eq!(required_len(PixelFormat::P010, w, h), w * h * 3);
+        assert_eq!(required_len(PixelFormat::YUYV422, w, h), w * h * 2);
+        assert_eq!(required_len(PixelFormat::RGB32, w, h), w * h * 4);
+        assert_eq!(required_len(PixelFormat::MJPEG, w, h), 0);
+        assert_eq!(required_len(PixelFormat::ARGB, usize::MAX, 2), usize::MAX);
+    }
+
+    #[test]
+    fn unallocatable_frame_is_an_error_not_a_panic() {
+        assert!(matches!(
+            alloc_frame(Pixel::NV12, 1 << 20, 1 << 20),
+            Err(AsFFmpegError::Allocation { .. })
+        ));
+        assert!(alloc_frame(Pixel::NV12, 64, 48).is_ok_and(|frame| frame.planes() == 2));
     }
 }

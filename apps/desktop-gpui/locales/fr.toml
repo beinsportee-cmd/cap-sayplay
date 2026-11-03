@@ -222,7 +222,7 @@ last_original = "Dernier enregistrement : méthode d'origine"
 original = "Origine uniquement"
 
 [settings.general.preset]
-description = "Enregistrez ces paramètres dans un fichier, ou chargez un fichier créé sur un autre ordinateur. Les dossiers, appareils, raccourcis et la connexion restent propres à chaque ordinateur."
+description = "Enregistrez ces paramètres et vos préréglages de l'éditeur dans un fichier, ou chargez un fichier créé sur un autre ordinateur. Les dossiers, appareils, raccourcis et la connexion restent propres à chaque ordinateur."
 export = "Exporter…"
 export_failed = "Le fichier de paramètres n'a pas pu être enregistré."
 exported = "Paramètres exportés."

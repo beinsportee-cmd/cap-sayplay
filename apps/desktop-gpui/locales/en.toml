@@ -224,7 +224,7 @@ last_original = { text = "Last recording: original method", context = "Shown und
 original = "Original only"
 
 [settings.general.preset]
-description = "Save these settings to a file, or load a file made on another computer. Folders, devices, shortcuts and sign-in stay as they are on each computer."
+description = "Save these settings and your editor presets to a file, or load a file made on another computer. Folders, devices, shortcuts and sign-in stay as they are on each computer."
 export = "Export…"
 export_failed = "The settings file couldn't be saved."
 exported = "Settings exported."

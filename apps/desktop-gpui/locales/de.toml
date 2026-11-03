@@ -222,7 +222,7 @@ last_original = "Letzte Aufnahme: ursprüngliche Methode"
 original = "Nur Original"
 
 [settings.general.preset]
-description = "Speichere diese Einstellungen in einer Datei oder lade eine Datei, die auf einem anderen Computer erstellt wurde. Ordner, Geräte, Tastenkürzel und Anmeldung bleiben auf jedem Computer, wie sie sind."
+description = "Speichere diese Einstellungen und deine Editor-Vorlagen in einer Datei oder lade eine Datei, die auf einem anderen Computer erstellt wurde. Ordner, Geräte, Tastenkürzel und Anmeldung bleiben auf jedem Computer, wie sie sind."
 export = "Exportieren…"
 export_failed = "Die Einstellungsdatei konnte nicht gespeichert werden."
 exported = "Einstellungen exportiert."

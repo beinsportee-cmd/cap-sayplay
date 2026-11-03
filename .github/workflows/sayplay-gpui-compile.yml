@@ -95,3 +95,11 @@ jobs:
       - name: Typecheck cap-gpui (SayPlay)
         shell: bash
         run: ./scripts/check-sayplay-gpui-compile.sh x86_64-pc-windows-msvc
+
+      - name: Unit tests (camera frame conversion)
+        shell: bash
+        working-directory: apps/desktop-gpui
+        run: |
+          unset VCINSTALLDIR
+          export PATH="$GITHUB_WORKSPACE/target/ffmpeg/bin:$PATH"
+          CARGO_TERM_COLOR=never cargo +1.95.0 test --release --target x86_64-pc-windows-msvc -p cap-camera-ffmpeg --lib

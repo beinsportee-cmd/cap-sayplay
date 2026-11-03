@@ -380,7 +380,8 @@ fn english_matches_the_literals_it_replaced() {
         ),
         (
             tr::settings::general::preset::description(),
-            "Save these settings to a file, or load a file made on another computer. \
+            "Save these settings and your editor presets to a file, or load a file made on \
+                             another computer. \
                              Folders, devices, shortcuts and sign-in stay as they are on each \
                              computer."
                 .into(),

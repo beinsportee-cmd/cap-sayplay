@@ -222,7 +222,7 @@ last_original = "上次录制：原始方法"
 original = "仅原始方法"
 
 [settings.general.preset]
-description = "将这些设置保存到文件，或载入在其他电脑上创建的文件。文件夹、设备、快捷键和登录信息在每台电脑上保持不变。"
+description = "将这些设置和编辑器预设保存到文件，或载入在其他电脑上创建的文件。文件夹、设备、快捷键和登录信息在每台电脑上保持不变。"
 export = "导出…"
 export_failed = "无法保存设置文件。"
 exported = "设置已导出。"

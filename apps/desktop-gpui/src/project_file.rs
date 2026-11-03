@@ -222,6 +222,25 @@ fn pack_config(
     }
 }
 
+/// Points the app's own wallpapers in `config` at this PC's install wherever
+/// the path it names doesn't exist here. Returns whether anything changed.
+pub(crate) fn localize_wallpapers(
+    config: &mut Value,
+    local_wallpaper: &dyn Fn(&str) -> Option<String>,
+) -> bool {
+    visit_background_paths(config, &mut |kind, path| {
+        if kind == "wallpaper"
+            && !Path::new(path.as_str()).exists()
+            && let Some(local) = local_wallpaper(path)
+        {
+            *path = local;
+            true
+        } else {
+            false
+        }
+    })
+}
+
 /// Calls `visit` with the kind and path of every image or wallpaper
 /// background: the project's own and any style segment's override. `visit`
 /// returns whether it changed the path; so does this.

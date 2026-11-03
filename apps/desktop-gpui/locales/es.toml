@@ -222,7 +222,7 @@ last_original = "Última grabación: método original"
 original = "Solo original"
 
 [settings.general.preset]
-description = "Guarda estos ajustes en un archivo o carga un archivo creado en otro ordenador. Las carpetas, los dispositivos, los atajos y la sesión se mantienen en cada ordenador."
+description = "Guarda estos ajustes y tus preajustes del editor en un archivo o carga un archivo creado en otro ordenador. Las carpetas, los dispositivos, los atajos y la sesión se mantienen en cada ordenador."
 export = "Exportar…"
 export_failed = "No se pudo guardar el archivo de ajustes."
 exported = "Ajustes exportados."
