@@ -132,6 +132,7 @@ test("platform resources point at the shared native dependencies", () => {
 	const windows = gpuiPlatformConfig("win32").bundle.resources;
 	assert.equal(windows["../../target/ffmpeg/bin/*.dll"], "./");
 	assert.equal(windows["../../target/native-deps/onnxruntime/lib/*.dll"], "./");
+	assert.equal(windows["../../target/native-deps/vcruntime/*.dll"], "./");
 	assert.equal(gpuiPlatformConfig("linux"), null);
 });
 

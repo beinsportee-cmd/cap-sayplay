@@ -221,6 +221,8 @@ async function main() {
 				"Visual Studio C++ build tools installation was not found",
 			);
 
+		await setupWindowsVcRuntime(vcInstallDir.trim());
+
 		const libclangCandidates = [
 			path.join(
 				vcInstallDir.trim(),
@@ -596,6 +598,57 @@ async function setupLinuxOnnxRuntime() {
 	} else console.log("Using cached ONNX Runtime shared library");
 
 	return outputPath;
+}
+
+// The app, cap-cli, cap-muxer, DXC and ONNX Runtime import these from the
+// MSVC runtime. Shipping them next to the exe lets the installer run on PCs
+// without (or with an older) Visual C++ Redistributable; Windows loads
+// app-local copies first.
+const VC_RUNTIME_DLLS = [
+	"vcruntime140.dll",
+	"vcruntime140_1.dll",
+	"msvcp140.dll",
+	"msvcp140_1.dll",
+];
+
+async function setupWindowsVcRuntime(vcInstallDir) {
+	const redistArch = { x86_64: "x64", aarch64: "arm64" }[arch];
+	if (!redistArch)
+		throw new Error(`Unsupported Windows architecture for VC runtime: ${arch}`);
+
+	const redistRoot = path.join(vcInstallDir, "VC", "Redist", "MSVC");
+	const versions = (await fs.readdir(redistRoot).catch(() => []))
+		.filter((name) => /^\d+\.\d+\.\d+$/.test(name))
+		.sort((a, b) => {
+			const left = a.split(".").map(Number);
+			const right = b.split(".").map(Number);
+			return (
+				right[0] - left[0] || right[1] - left[1] || right[2] - left[2]
+			);
+		});
+
+	for (const version of versions) {
+		const crtDir = path.join(
+			redistRoot,
+			version,
+			redistArch,
+			"Microsoft.VC143.CRT",
+		);
+		if ((await missingFiles(crtDir, VC_RUNTIME_DLLS)).length > 0) continue;
+
+		const outputDir = path.join(targetDir, "native-deps", "vcruntime");
+		await fs.rm(outputDir, { recursive: true, force: true });
+		await fs.mkdir(outputDir, { recursive: true });
+		for (const name of VC_RUNTIME_DLLS)
+			await fs.copyFile(path.join(crtDir, name), path.join(outputDir, name));
+		console.log(`Copied MSVC runtime ${version} (${redistArch})`);
+		return;
+	}
+
+	throw new Error(
+		`MSVC runtime DLLs (${VC_RUNTIME_DLLS.join(", ")}) were not found under ${redistRoot}. ` +
+			`Install the "C++ 2022 Redistributable Update" component in the Visual Studio Installer.`,
+	);
 }
 
 async function setupWindowsDxc() {
