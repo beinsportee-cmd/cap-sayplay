@@ -2405,6 +2405,14 @@ frame_rate = "Frame rate"
 quality = "Quality"
 resolution = "Resolution"
 
+[editor.export.separate_audio]
+description = "Also saves the microphone and the system audio as their own .m4a files next to the video. Takes longer."
+failed = { text = "The video was exported, but the separate audio files could not be saved: {error}", context = "{error} is a technical error message, usually in English." }
+failed_title = "Audio files not saved"
+microphone_file = { text = "Microphone", context = "End of the exported microphone file's name, as in \"Lesson - Microphone.m4a\". Use only characters allowed in file names." }
+system_file = { text = "System audio", context = "End of the exported system audio file's name, as in \"Lesson - System audio.m4a\". Use only characters allowed in file names." }
+title = "Separate audio files"
+
 [editor.export.stats]
 calculating = "Calculating…"
 duration = "Duration"

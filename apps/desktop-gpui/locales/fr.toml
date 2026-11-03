@@ -2403,6 +2403,14 @@ frame_rate = "Fréquence d'images"
 quality = "Qualité"
 resolution = "Résolution"
 
+[editor.export.separate_audio]
+description = "Enregistre aussi le micro et l'audio système dans leurs propres fichiers .m4a, à côté de la vidéo. Prend plus de temps."
+failed = "La vidéo a été exportée, mais les fichiers audio séparés n'ont pas pu être enregistrés : {error}"
+failed_title = "Fichiers audio non enregistrés"
+microphone_file = "Micro"
+system_file = "Audio système"
+title = "Fichiers audio séparés"
+
 [editor.export.stats]
 calculating = "Calcul…"
 duration = "Durée"

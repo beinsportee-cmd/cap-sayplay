@@ -211,6 +211,10 @@ pub struct ExportUi {
     pub cursor_only: bool,
     pub custom_bpp: Option<f32>,
     pub force_ffmpeg: bool,
+    /// "Separate audio files", for MP4 file exports only. Not saved with the
+    /// other preferences: it costs an extra export per track, so it starts
+    /// off every time.
+    pub separate_audio: bool,
     pub advanced_open: bool,
     pub preview: Option<Arc<RenderImage>>,
     pub preview_stats: Option<PreviewStats>,
@@ -303,6 +307,7 @@ impl ExportUi {
             cursor_only: prefs.cursor_only,
             custom_bpp: prefs.custom_bpp,
             force_ffmpeg: prefs.force_ffmpeg_decoder,
+            separate_audio: false,
             advanced_open: prefs.advanced_open,
             preview: None,
             preview_stats: None,
@@ -885,6 +890,10 @@ impl EditorWindow {
         let optimize = ui.optimize_filesize;
         let turbo = ui.turbo;
         let force = ui.force_ffmpeg;
+        let separate_audio = ui.separate_audio
+            && destination == ExportDestination::File
+            && format == ExportFormatKind::Mp4
+            && !cursor_only;
         let project_path = self.project_path.clone();
         let project = self.project.clone();
         ui.cancel = Arc::new(AtomicBool::new(false));
@@ -985,9 +994,14 @@ impl EditorWindow {
             let notify_file_save = save_path.is_some();
             let (progress_tx, progress_rx) = flume::unbounded::<(u32, u32)>();
             let export_cancel = cancel.clone();
+            // The extra sender keeps the progress loop below running through
+            // the audio passes, which report their own frames.
+            let audio_tracks = separate_audio
+                .then(|| (project_path.clone(), project.clone(), progress_tx.clone()));
             let export = gpui_tokio::Tokio::spawn(cx, async move {
                 let stopped = export_cancel.clone();
-                resources.supervise(run_export(
+                let audio_cancel = export_cancel.clone();
+                let path = resources.supervise(run_export(
                     project_path,
                     project,
                     format,
@@ -1003,7 +1017,29 @@ impl EditorWindow {
                     save_path.clone(),
                     progress_tx,
                     export_cancel,
-                ), || stopped.store(true, Ordering::Release)).await
+                ), || stopped.store(true, Ordering::Release)).await?;
+                let audio_error = match audio_tracks {
+                    Some((project_path, project, progress_tx)) => {
+                        let stopped = audio_cancel.clone();
+                        resources
+                            .supervise(
+                                export_audio_tracks(
+                                    project_path,
+                                    project,
+                                    &path,
+                                    fps,
+                                    force,
+                                    progress_tx,
+                                    audio_cancel,
+                                ),
+                                || stopped.store(true, Ordering::Release),
+                            )
+                            .await
+                            .err()
+                    }
+                    None => None,
+                };
+                Ok::<_, String>((path, audio_error))
             });
 
             loop {
@@ -1030,7 +1066,7 @@ impl EditorWindow {
             }
 
             match export.await {
-                Ok(Ok(path)) => {
+                Ok(Ok((path, audio_error))) => {
                     tracing::info!(path = %path.display(), "editor export completed");
                     if destination == ExportDestination::Clipboard {
                         let _ = this.update(cx, |this, cx| {
@@ -1054,6 +1090,17 @@ impl EditorWindow {
                             }
                             cx.notify();
                         });
+                    }
+                    if let Some(error) = audio_error {
+                        if cancel.load(Ordering::Relaxed) {
+                            tracing::info!(error, "separate audio files cancelled");
+                        } else {
+                            tracing::error!(error, "separate audio files failed");
+                            platform::alert_dialog(
+                                tr::editor::export::separate_audio::failed_title(),
+                                &tr::editor::export::separate_audio::failed(&error),
+                            );
+                        }
                     }
                 }
                 Ok(Err(error)) => {
@@ -2244,6 +2291,9 @@ impl EditorWindow {
             .when(turbo_available(), |this| {
                 this.child(self.export_turbo_row(ui, cx))
             })
+            .when(ui.destination == ExportDestination::File, |this| {
+                this.child(self.export_separate_audio_row(ui, cx))
+            })
     }
 
     fn export_toggle_row(
@@ -2298,6 +2348,21 @@ impl EditorWindow {
                     ui.persist();
                 }
                 this.refresh_export_preview(window, cx);
+                cx.notify();
+            }),
+        )
+    }
+
+    fn export_separate_audio_row(&self, ui: &ExportUi, cx: &mut Context<Self>) -> impl IntoElement {
+        self.export_toggle_row(
+            "export-separate-audio",
+            tr::editor::export::separate_audio::title(),
+            tr::editor::export::separate_audio::description(),
+            ui.separate_audio,
+            cx.listener(|this, _, _, cx| {
+                if let Some(ui) = this.export.as_mut() {
+                    ui.separate_audio = !ui.separate_audio;
+                }
                 cx.notify();
             }),
         )
@@ -3181,6 +3246,110 @@ async fn run_export(
             }
         }
     }
+}
+
+/// Finite and well under the renderer's -30 dB silence threshold; some audio
+/// paths reject non-finite volumes.
+const MUTED_TRACK_DB: f32 = -60.0;
+
+/// "Separate audio files": after an MP4 export, the microphone and the system
+/// audio are saved beside it as `<video> - Microphone.m4a` and
+/// `<video> - System audio.m4a`. Each is the same export run again with every
+/// other audio source muted, so cuts, speed, volume and Studio Sound match the
+/// video exactly; only its audio stream is kept. Tracks the recording does not
+/// have are skipped.
+async fn export_audio_tracks(
+    project_path: PathBuf,
+    project: cap_project::ProjectConfiguration,
+    video_path: &Path,
+    fps: u32,
+    force: bool,
+    progress_tx: flume::Sender<(u32, u32)>,
+    cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
+    let (has_mic, has_system) = {
+        let meta =
+            RecordingMeta::load_for_project(&project_path).map_err(|error| error.to_string())?;
+        match meta.studio_meta() {
+            Some(cap_project::StudioRecordingMeta::SingleSegment { segment }) => {
+                (segment.audio.is_some(), false)
+            }
+            Some(cap_project::StudioRecordingMeta::MultipleSegments { inner }) => (
+                inner.segments.iter().any(|segment| segment.mic.is_some()),
+                inner
+                    .segments
+                    .iter()
+                    .any(|segment| segment.usable_system_audio().is_some()),
+            ),
+            None => return Ok(()),
+        }
+    };
+    let folder = video_path.parent().unwrap_or(Path::new("."));
+    let stem = video_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or(crate::sayplay::UNTITLED_RECORDING);
+    let (width, height) = ExportResolution::P720.size();
+
+    for (present, mic, suffix) in [
+        (
+            has_mic,
+            true,
+            tr::editor::export::separate_audio::microphone_file(),
+        ),
+        (
+            has_system,
+            false,
+            tr::editor::export::separate_audio::system_file(),
+        ),
+    ] {
+        if !present {
+            continue;
+        }
+        let mut solo = project.clone();
+        if mic {
+            solo.audio.system_volume_db = MUTED_TRACK_DB;
+        } else {
+            solo.audio.mic_volume_db = MUTED_TRACK_DB;
+        }
+        if let Some(timeline) = solo.timeline.as_mut() {
+            for segment in &mut timeline.audio_segments {
+                segment.enabled = false;
+            }
+        }
+
+        // The video half is thrown away, so it renders at the smallest size
+        // and bitrate; the frame rate stays the export's so speed changes
+        // sample the audio at the same points.
+        let work = tempfile::tempdir().map_err(|error| error.to_string())?;
+        let video = work.path().join("track.mp4");
+        run_export(
+            project_path.clone(),
+            solo,
+            ExportFormatKind::Mp4,
+            false,
+            fps,
+            width,
+            height,
+            ExportCompression::Potato,
+            None,
+            false,
+            false,
+            force,
+            Some(video.clone()),
+            progress_tx.clone(),
+            cancel.clone(),
+        )
+        .await?;
+
+        let dest = folder.join(format!("{stem} - {suffix}.m4a"));
+        if let Err(error) = cap_enc_ffmpeg::remux::extract_audio_track(&video, &dest) {
+            let _ = std::fs::remove_file(&dest);
+            return Err(error.to_string());
+        }
+        tracing::info!(path = %dest.display(), "saved a separate audio track");
+    }
+    Ok(())
 }
 
 #[cfg(test)]

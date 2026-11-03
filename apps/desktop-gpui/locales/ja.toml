@@ -2403,6 +2403,14 @@ frame_rate = "フレームレート"
 quality = "品質"
 resolution = "解像度"
 
+[editor.export.separate_audio]
+description = "マイクとシステム音声を、動画と同じ場所にそれぞれ別の .m4a ファイルとしても保存します。時間が長くかかります。"
+failed = "動画は書き出されましたが、個別の音声ファイルを保存できませんでした：{error}"
+failed_title = "音声ファイルを保存できませんでした"
+microphone_file = "マイク"
+system_file = "システム音声"
+title = "音声ファイルを分けて保存"
+
 [editor.export.stats]
 calculating = "計算中…"
 duration = "長さ"

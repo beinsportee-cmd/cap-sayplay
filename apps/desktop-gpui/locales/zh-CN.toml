@@ -2403,6 +2403,14 @@ frame_rate = "帧率"
 quality = "画质"
 resolution = "分辨率"
 
+[editor.export.separate_audio]
+description = "同时将麦克风和系统音频另存为视频旁边的独立 .m4a 文件。耗时更长。"
+failed = "视频已导出，但无法保存独立的音频文件：{error}"
+failed_title = "音频文件未保存"
+microphone_file = "麦克风"
+system_file = "系统音频"
+title = "独立音频文件"
+
 [editor.export.stats]
 calculating = "正在计算…"
 duration = "时长"

@@ -2403,6 +2403,14 @@ frame_rate = "Velocidad de fotogramas"
 quality = "Calidad"
 resolution = "Resolución"
 
+[editor.export.separate_audio]
+description = "Guarda también el micrófono y el audio del sistema como archivos .m4a propios junto al vídeo. Tarda más."
+failed = "El vídeo se exportó, pero no se pudieron guardar los archivos de audio separados: {error}"
+failed_title = "No se guardaron los archivos de audio"
+microphone_file = "Micrófono"
+system_file = "Audio del sistema"
+title = "Archivos de audio separados"
+
 [editor.export.stats]
 calculating = "Calculando…"
 duration = "Duración"

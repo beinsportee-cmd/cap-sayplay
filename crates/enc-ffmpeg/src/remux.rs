@@ -1325,6 +1325,52 @@ fn rescale_video_timestamps_inner(
     Ok(())
 }
 
+/// Stream-copies the first audio track of `input_path` into a new MP4
+/// container at `output_path` (an `.m4a` when the track is AAC), dropping
+/// every other stream. Nothing is re-encoded.
+pub fn extract_audio_track(input_path: &Path, output_path: &Path) -> Result<(), RemuxError> {
+    suppress_ffmpeg_logs();
+    let result = extract_audio_track_inner(input_path, output_path);
+    restore_ffmpeg_logs();
+    result
+}
+
+fn extract_audio_track_inner(input_path: &Path, output_path: &Path) -> Result<(), RemuxError> {
+    let mut ictx = avformat::input(input_path)?;
+    let audio_index = ictx
+        .streams()
+        .find(|stream| stream.parameters().medium() == ffmpeg::media::Type::Audio)
+        .map(|stream| stream.index())
+        .ok_or(RemuxError::NoAudioStream)?;
+    let mut octx = avformat::output_as(output_path, "mp4")?;
+
+    {
+        let input_stream = ictx.stream(audio_index).ok_or(RemuxError::NoAudioStream)?;
+        let mut output_stream = octx.add_stream(None)?;
+        output_stream.set_parameters(input_stream.parameters());
+        unsafe {
+            (*output_stream.as_mut_ptr()).time_base = (*input_stream.as_ptr()).time_base;
+        }
+    }
+
+    octx.write_header()?;
+
+    for (input_stream, mut packet) in ictx.packets() {
+        if input_stream.index() != audio_index {
+            continue;
+        }
+        let output_time_base = octx.stream(0).ok_or(RemuxError::NoAudioStream)?.time_base();
+        packet.rescale_ts(input_stream.time_base(), output_time_base);
+        packet.set_stream(0);
+        packet.set_position(-1);
+        packet.write_interleaved(&mut octx)?;
+    }
+
+    octx.write_trailer()?;
+
+    Ok(())
+}
+
 pub fn merge_video_audio(
     video_path: &Path,
     audio_path: &Path,

@@ -2403,6 +2403,14 @@ frame_rate = "Bildrate"
 quality = "Qualität"
 resolution = "Auflösung"
 
+[editor.export.separate_audio]
+description = "Speichert Mikrofon und Systemaudio zusätzlich als eigene .m4a-Dateien neben dem Video. Dauert länger."
+failed = "Das Video wurde exportiert, aber die separaten Audiodateien konnten nicht gespeichert werden: {error}"
+failed_title = "Audiodateien nicht gespeichert"
+microphone_file = "Mikrofon"
+system_file = "Systemaudio"
+title = "Separate Audiodateien"
+
 [editor.export.stats]
 calculating = "Wird berechnet…"
 duration = "Dauer"
