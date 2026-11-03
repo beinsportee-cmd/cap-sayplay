@@ -295,6 +295,13 @@ in_progress = "Recording in progress"
 load_more = "Load more"
 open_bundle = "Open recording bundle"
 open_link = "Open link"
+open_project = { text = "Open project", context = "Button that opens a project folder someone shared, for example on a USB stick. The project is copied into the user's recordings first." }
+open_project_copy_failed = { text = "Couldn't copy the project into your recordings folder: {error}", context = "{error} is a technical error message, usually in English." }
+open_project_error_title = "Couldn't open project"
+open_project_in_progress = "This project is still being recorded. Try again once the recording has finished."
+open_project_instant = "Instant mode recordings can't be opened in the editor."
+open_project_invalid = { text = "This folder isn't a Cap project. Choose the project's .cap folder.", context = "Cap is the product name. Keep .cap as is: it is the end of the project folder's name." }
+opening_project = { text = "Opening project…", context = "The Open project button while the project is being copied." }
 retry_upload = "Retry upload"
 show_all = "Show all"
 title = "Recordings"

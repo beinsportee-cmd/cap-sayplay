@@ -418,6 +418,9 @@ struct Recordings {
     /// The 2s poll, armed only while something in the list is still being
     /// written (`refetchInterval`).
     tick: Option<gpui::Task<()>>,
+    /// "Open project" is copying a shared project; the button stays disabled
+    /// so a second click cannot start a second copy.
+    opening_project: bool,
 }
 
 impl Recordings {
@@ -431,6 +434,7 @@ impl Recordings {
             scan: None,
             decode: None,
             tick: None,
+            opening_project: false,
         }
     }
 
@@ -1404,6 +1408,70 @@ impl SettingsWindow {
             // defers: `open_window` paints synchronously.
             cx.update(|_window, cx| cx.defer(move |cx| crate::app_windows::open_editor(path, cx)))
                 .ok();
+        })
+        .detach();
+    }
+
+    /// The header's "Open project": pick a shared `.cap` folder, copy it into
+    /// the library off the UI thread ([`crate::import::copy_shared_project`]),
+    /// then open it exactly as the row's Edit button would.
+    fn open_shared_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.recordings.opening_project {
+            return;
+        }
+        let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: None,
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = paths.await else {
+                return;
+            };
+            let Some(source) = paths.into_iter().next() else {
+                return;
+            };
+            let started = this.update(cx, |this, cx| {
+                if this.recordings.opening_project {
+                    return false;
+                }
+                this.recordings.opening_project = true;
+                cx.notify();
+                true
+            });
+            if !matches!(started, Ok(true)) {
+                return;
+            }
+            let result = cx
+                .background_executor()
+                .spawn(async move { crate::import::copy_shared_project(&source) })
+                .await;
+            match result {
+                Ok(project) => {
+                    this.update_in(cx, |this, window, cx| {
+                        this.recordings.opening_project = false;
+                        cx.notify();
+                        // Deferred: it updates this window's view.
+                        cx.defer(|cx| crate::app_windows::refresh_library_after_delete(cx));
+                        this.open_editor_confirmed(project.path, project.failed, window, cx);
+                    })
+                    .ok();
+                }
+                Err(message) => {
+                    tracing::warn!(%message, "could not open a shared project");
+                    this.update(cx, |this, cx| {
+                        this.recordings.opening_project = false;
+                        cx.notify();
+                    })
+                    .ok();
+                    // Outside the update: the modal runs its own message loop.
+                    crate::platform::alert_dialog(
+                        tr::settings::recordings::open_project_error_title(),
+                        &message,
+                    );
+                }
+            }
         })
         .detach();
     }
@@ -2432,6 +2500,30 @@ impl SettingsWindow {
             )
             .height(px(36.))
             .into_any_element();
+        let opening = self.recordings.opening_project;
+        let open_project = self
+            .button(
+                "recordings-open-project",
+                (ui::ButtonVariant::Gray, Some("icons/folder-open.svg")),
+                if opening {
+                    tr::settings::recordings::opening_project()
+                } else {
+                    tr::settings::recordings::open_project()
+                },
+                opening,
+                cx,
+                |this, window, cx| this.open_shared_project(window, cx),
+            )
+            .height(px(36.))
+            .into_any_element();
+        let actions = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(px(8.))
+            .child(open_project)
+            .child(import)
+            .into_any_element();
 
         // `when={recordings.data && recordings.data.length > 0}`: an empty
         // library and a scan still in flight take the same branch, because the
@@ -2458,7 +2550,7 @@ impl SettingsWindow {
             self.section(
                 tr::settings::recordings::title(),
                 Some(tr::settings::recordings::description()),
-                Some(import),
+                Some(actions),
                 children,
             )
             .into_any_element(),
