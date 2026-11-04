@@ -2502,9 +2502,11 @@ size_label = "大小"
 title = "摄像头"
 
 [editor.tabs.camera.blur]
+choose_picture = "选择图片…"
 heavy = "强模糊"
 light = "轻模糊"
 off = "关闭"
+picture = "图片"
 remove = "移除背景"
 
 [editor.tabs.camera.shape]

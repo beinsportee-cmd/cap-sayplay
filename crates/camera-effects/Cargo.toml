@@ -16,6 +16,7 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio.workspace = true
+naga = { version = "25.0.1", features = ["wgsl-in"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
 libloading = "0.9"

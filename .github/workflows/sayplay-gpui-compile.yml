@@ -102,3 +102,22 @@ jobs:
           unset VCINSTALLDIR
           export PATH="$GITHUB_WORKSPACE/target/ffmpeg/bin:$PATH"
           CARGO_TERM_COLOR=never cargo +1.95.0 test --release --target x86_64-pc-windows-msvc -p cap-camera-ffmpeg --lib
+
+      - name: Unit tests (camera background picture)
+        shell: bash
+        run: |
+          unset VCINSTALLDIR
+          export PATH="$GITHUB_WORKSPACE/target/ffmpeg/bin:$PATH"
+          CARGO_TERM_COLOR=never cargo +1.95.0 test --release --target x86_64-pc-windows-msvc -p cap-project --lib camera_background
+          CARGO_TERM_COLOR=never cargo +1.95.0 test --release --target x86_64-pc-windows-msvc -p cap-camera-effects --lib picture
+          CARGO_TERM_COLOR=never cargo +1.95.0 test --release --target x86_64-pc-windows-msvc -p cap-rendering --lib camera_picture
+
+      - name: Unit tests (editor camera picture, shared projects, labels)
+        shell: bash
+        working-directory: apps/desktop-gpui
+        run: |
+          unset VCINSTALLDIR
+          export PATH="$GITHUB_WORKSPACE/target/ffmpeg/bin:$PATH"
+          CARGO_TERM_COLOR=never cargo +1.95.0 test --release --target x86_64-pc-windows-msvc -p cap-desktop-gpui --bin cap-gpui -- \
+            camera_picture camera_background_picture project_file:: editor_shell_surface \
+            the_catalogues_match_the_source indexed_sidebar_menu apply_camera_preview

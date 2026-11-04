@@ -2140,6 +2140,31 @@ fn import_desktop_background_from_source(
     Ok(output)
 }
 
+/// Copies a picked picture into `dir` as `<prefix>-<ts>-<name>`, the naming
+/// the background picker uses, refusing anything that is not a picture.
+fn copy_picked_image(source: &Path, prefix: &str, dir: &Path) -> Result<PathBuf, String> {
+    let extension = source
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_lowercase);
+    if !extension.is_some_and(|extension| BACKGROUND_IMAGE_EXTENSIONS.contains(&extension.as_str()))
+    {
+        return Err("Invalid image file type".to_string());
+    }
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis())
+        .unwrap_or(0);
+    let name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("image");
+    let destination = dir.join(format!("{prefix}-{timestamp}-{name}"));
+    std::fs::create_dir_all(dir).map_err(|err| format!("Failed to save image: {err}"))?;
+    std::fs::copy(source, &destination).map_err(|err| format!("Failed to save image: {err}"))?;
+    Ok(destination)
+}
+
 /// `findStoredCurrentDesktopBackgroundPath` (`:1849-1874`): the newest
 /// `current-desktop-background-<ts>.*` in the bundle's assets dir, ignoring the
 /// `.pending.` ones, then the un-timestamped legacy names.
@@ -2505,6 +2530,76 @@ impl EditorWindow {
                     }
                     Err(error) if !error.is_empty() => {
                         tracing::error!("background image import failed: {error}");
+                    }
+                    Err(_) => {}
+                }
+                cx.notify();
+            })
+            .ok();
+        }));
+    }
+
+    /// The camera background menu's picture row. The file is copied into the
+    /// app-data dir like a background picture, so moving or deleting the
+    /// original later does not lose it from the project.
+    pub(crate) fn pick_camera_picture(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.sidebar.picking_image {
+            return;
+        }
+        self.sidebar.picking_image = true;
+        let style_target = self.sidebar.style_target;
+        let style_fingerprint = self.style_target_fingerprint();
+        self.sidebar.picker_task = Some(cx.spawn_in(window, async move |this, cx| {
+            #[cfg(target_os = "linux")]
+            let picked = crate::platform::open_file_panel_async(
+                &[(
+                    tr::editor::tabs::camera::blur::picture(),
+                    &BACKGROUND_IMAGE_EXTENSIONS[..],
+                )],
+                None,
+                cx,
+            )
+            .await;
+            #[cfg(not(target_os = "linux"))]
+            let picked = cx
+                .update(|_, _| crate::platform::open_image_panel(&BACKGROUND_IMAGE_EXTENSIONS))
+                .ok()
+                .flatten();
+
+            let stored = match picked {
+                Some(source) => {
+                    cx.background_executor()
+                        .spawn(async move {
+                            copy_picked_image(&source, "camera-bg", &crate::store::app_data_dir())
+                        })
+                        .await
+                }
+                None => Err(String::new()),
+            };
+
+            this.update_in(cx, |this, window, cx| {
+                this.sidebar.picking_image = false;
+                if this.sidebar.style_target != style_target
+                    || this.style_target_fingerprint() != style_fingerprint
+                {
+                    cx.notify();
+                    return;
+                }
+                match stored {
+                    Ok(path) => {
+                        tracing::info!(path = %path.display(), "camera background picture chosen");
+                        let path = path.to_string_lossy().into_owned();
+                        this.edit_project("camera-picture", window, cx, move |project| {
+                            project.camera.background_blur =
+                                crate::editor_tabs::with_camera_picture(
+                                    &project.camera.background_blur,
+                                    path,
+                                );
+                            true
+                        });
+                    }
+                    Err(error) if !error.is_empty() => {
+                        tracing::error!("camera background picture import failed: {error}");
                     }
                     Err(_) => {}
                 }
@@ -4209,6 +4304,33 @@ impl EditorWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picked_camera_picture_is_copied_and_anything_else_is_refused() {
+        let source_dir = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let picture = source_dir.path().join("Class Room.JPG");
+        std::fs::write(&picture, b"not decoded here").unwrap();
+
+        let stored = copy_picked_image(&picture, "camera-bg", target.path()).unwrap();
+        assert_eq!(stored.parent(), Some(target.path()));
+        let name = stored.file_name().unwrap().to_str().unwrap();
+        assert!(name.starts_with("camera-bg-") && name.ends_with("-Class Room.JPG"));
+        assert_eq!(std::fs::read(&stored).unwrap(), b"not decoded here");
+
+        let text = source_dir.path().join("notes.txt");
+        std::fs::write(&text, b"hello").unwrap();
+        assert!(copy_picked_image(&text, "camera-bg", target.path()).is_err());
+        assert!(
+            copy_picked_image(
+                &source_dir.path().join("gone.png"),
+                "camera-bg",
+                target.path()
+            )
+            .is_err()
+        );
+        assert_eq!(std::fs::read_dir(target.path()).unwrap().count(), 1);
+    }
 
     #[test]
     fn a_new_grain_step_retires_the_old_texture_for_atlas_eviction() {

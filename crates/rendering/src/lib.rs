@@ -22,6 +22,7 @@ use futures::future::OptionFuture;
 use layers::{
     BackgroundLayer, BlurLayer, Camera3DBlurKind, Camera3DLayer, CameraLayer, ClickRippleLayer,
     ColorGradeLayer, CursorLayer, DisplayLayer, FrameLayer, MaskLayer, NotchLayer, NotchUniforms,
+    decode_background_rgba,
 };
 use specta::Type;
 use spring_mass_damper::SpringMassDamperSimulationConfig;
@@ -8180,9 +8181,145 @@ pub struct RendererLayers {
     camera_blur_processor: Option<cap_camera_effects::BlurProcessor>,
     camera_blur_init_failed: bool,
     camera_blur_unavailable: bool,
+    camera_picture: CameraPictureCache,
     realtime_camera_effects: bool,
     #[cfg(test)]
     split_layer_passes: bool,
+}
+
+/// The decoded camera background picture, kept until the project names a
+/// different one. A picture that cannot be read leaves the camera blurred.
+#[derive(Default)]
+struct CameraPictureCache {
+    path: Option<String>,
+    picture: Option<Arc<cap_camera_effects::BackgroundPicture>>,
+}
+
+impl CameraPictureCache {
+    fn picture_for(
+        &mut self,
+        blur: &cap_project::BackgroundBlurConfig,
+    ) -> Option<Arc<cap_camera_effects::BackgroundPicture>> {
+        let wanted = blur.active_picture().map(|picture| picture.path());
+        if self.path.as_deref() != wanted {
+            self.path = wanted.map(str::to_owned);
+            self.picture = wanted.and_then(load_camera_picture);
+        }
+        self.picture.clone()
+    }
+}
+
+fn load_camera_picture(path: &str) -> Option<Arc<cap_camera_effects::BackgroundPicture>> {
+    let Some(resolved) = clean_background_path(path) else {
+        tracing::warn!(
+            path,
+            "camera background picture not found; keeping the blur"
+        );
+        return None;
+    };
+    match decode_background_rgba(&resolved, cap_camera_effects::MAX_PICTURE_DIMENSION) {
+        Ok((rgba, width, height)) => {
+            cap_camera_effects::BackgroundPicture::new(rgba, width, height).map(Arc::new)
+        }
+        Err(error) => {
+            tracing::warn!(
+                path,
+                "camera background picture unreadable, keeping the blur: {error}"
+            );
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod camera_picture_tests {
+    use super::*;
+
+    fn blur(
+        mode: cap_project::BackgroundBlurMode,
+        path: &std::path::Path,
+    ) -> cap_project::BackgroundBlurConfig {
+        cap_project::BackgroundBlurConfig {
+            mode,
+            picture: Some(cap_project::CameraBackgroundPicture::Image {
+                path: path.to_string_lossy().into_owned(),
+            }),
+        }
+    }
+
+    #[test]
+    fn camera_picture_loads_once_and_follows_the_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("class.png");
+        image::RgbaImage::from_pixel(4, 2, image::Rgba([10, 20, 30, 255]))
+            .save(&path)
+            .unwrap();
+        let mut cache = CameraPictureCache::default();
+
+        let first = cache
+            .picture_for(&blur(cap_project::BackgroundBlurMode::Heavy, &path))
+            .expect("loads");
+        assert_eq!(first.dimensions(), (4, 2));
+        let again = cache
+            .picture_for(&blur(cap_project::BackgroundBlurMode::Light, &path))
+            .unwrap();
+        assert!(Arc::ptr_eq(&first, &again), "decoded once per path");
+
+        assert!(
+            cache
+                .picture_for(&blur(cap_project::BackgroundBlurMode::Off, &path))
+                .is_none()
+        );
+        assert!(
+            cache
+                .picture_for(&cap_project::BackgroundBlurConfig::default())
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn a_missing_or_broken_camera_picture_keeps_the_blur() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cache = CameraPictureCache::default();
+        let missing = dir.path().join("gone.jpg");
+        assert!(
+            cache
+                .picture_for(&blur(cap_project::BackgroundBlurMode::Heavy, &missing))
+                .is_none()
+        );
+        let broken = dir.path().join("broken.jpg");
+        std::fs::write(&broken, b"not a picture").unwrap();
+        assert!(
+            cache
+                .picture_for(&blur(cap_project::BackgroundBlurMode::Heavy, &broken))
+                .is_none()
+        );
+        image::RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 0, 255]))
+            .save(&missing.with_extension("png"))
+            .unwrap();
+        assert!(
+            cache
+                .picture_for(&blur(
+                    cap_project::BackgroundBlurMode::Heavy,
+                    &missing.with_extension("png")
+                ))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn a_huge_camera_picture_is_scaled_down() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("huge.png");
+        image::RgbaImage::new(4000, 1000).save(&path).unwrap();
+        let picture = CameraPictureCache::default()
+            .picture_for(&blur(cap_project::BackgroundBlurMode::Heavy, &path))
+            .unwrap();
+        let (width, height) = picture.dimensions();
+        assert!(width <= cap_camera_effects::MAX_PICTURE_DIMENSION);
+        assert!(height <= cap_camera_effects::MAX_PICTURE_DIMENSION);
+        assert_eq!(width / height, 4);
+    }
 }
 
 fn join_layer<T>(handle: std::thread::ScopedJoinHandle<'_, T>) -> T {
@@ -8305,6 +8442,7 @@ impl RendererLayers {
                 camera_blur_processor: None,
                 camera_blur_init_failed: false,
                 camera_blur_unavailable: false,
+                camera_picture: CameraPictureCache::default(),
                 realtime_camera_effects: false,
                 #[cfg(test)]
                 split_layer_passes: false,
@@ -8352,6 +8490,8 @@ impl RendererLayers {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         mode: cap_camera_effects::BlurMode,
+        picture: Option<&Arc<cap_camera_effects::BackgroundPicture>>,
+        mirrored: bool,
     ) {
         if self.camera.source_texture_for_blur().is_none()
             && self.camera_only.source_texture_for_blur().is_none()
@@ -8364,6 +8504,7 @@ impl RendererLayers {
         let Some(processor) = self.camera_blur_processor.as_mut() else {
             return;
         };
+        processor.set_background_picture(device, queue, picture, mirrored);
 
         let source_texture = self
             .camera
@@ -8399,6 +8540,8 @@ impl RendererLayers {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         mode: cap_camera_effects::BlurMode,
+        picture: Option<&Arc<cap_camera_effects::BackgroundPicture>>,
+        mirrored: bool,
     ) {
         if self.camera.source_texture_for_blur().is_none()
             && self.camera_only.source_texture_for_blur().is_none()
@@ -8411,6 +8554,7 @@ impl RendererLayers {
         let Some(processor) = self.camera_blur_processor.as_mut() else {
             return;
         };
+        processor.set_background_picture(device, queue, picture, mirrored);
 
         let source_texture = self
             .camera
@@ -8571,7 +8715,15 @@ impl RendererLayers {
         );
 
         if let Some(mode) = uniforms.camera_background_effect_mode() {
-            self.run_shared_camera_blur(&constants.device, &constants.queue, mode);
+            let camera = &uniforms.project.camera;
+            let picture = self.camera_picture.picture_for(&camera.background_blur);
+            self.run_shared_camera_blur(
+                &constants.device,
+                &constants.queue,
+                mode,
+                picture.as_ref(),
+                camera.mirror,
+            );
         }
 
         if let Some(overlays) = &mut self.overlays {
@@ -8738,11 +8890,15 @@ impl RendererLayers {
 
         let start = Instant::now();
         if let Some(mode) = uniforms.camera_background_effect_mode() {
+            let camera = &uniforms.project.camera;
+            let picture = self.camera_picture.picture_for(&camera.background_blur);
             self.run_shared_camera_blur_with_encoder(
                 &constants.device,
                 &constants.queue,
                 encoder,
                 mode,
+                picture.as_ref(),
+                camera.mirror,
             );
         }
         timings.camera_blur_prepare_duration = start.elapsed();

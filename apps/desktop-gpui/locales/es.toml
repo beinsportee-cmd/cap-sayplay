@@ -2502,9 +2502,11 @@ size_label = "Tamaño"
 title = "Cámara"
 
 [editor.tabs.camera.blur]
+choose_picture = "Elegir imagen…"
 heavy = "Desenfoque intenso"
 light = "Desenfoque suave"
 off = "Desactivado"
+picture = "Imagen"
 remove = "Quitar fondo"
 
 [editor.tabs.camera.shape]

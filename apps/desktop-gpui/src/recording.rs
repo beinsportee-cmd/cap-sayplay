@@ -2001,10 +2001,19 @@ fn apply_camera_preview_to_project_config(
         );
         return false;
     };
-    background_blur.insert(
-        "mode".to_string(),
-        Value::String(blur_mode_json(blur).to_string()),
-    );
+    // A camera picture from the default preset stays unless the bubble was
+    // blurring, which is what the teacher saw while recording.
+    let keeps_picture = blur == crate::store::BlurMode::Off
+        && background_blur
+            .get("picture")
+            .is_some_and(|picture| picture.is_object());
+    if !keeps_picture {
+        background_blur.remove("picture");
+        background_blur.insert(
+            "mode".to_string(),
+            Value::String(blur_mode_json(blur).to_string()),
+        );
+    }
 
     if let Some(placement) = placement {
         let mut positioned = cap_project::Camera::default();
@@ -3987,6 +3996,43 @@ mod tests {
             expected["camera"]["position"]["y"] = "top".into();
             assert_eq!(written, expected);
         }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_default_preset_camera_picture_survives_unless_the_bubble_blurred() {
+        let dir = temp_project("camera-picture");
+        let path = dir.join("project-config.json");
+        let picture = serde_json::json!({ "type": "image", "path": "C:\\Pictures\\class.jpg" });
+        let original = serde_json::json!({
+            "camera": { "backgroundBlur": { "mode": "heavy", "picture": picture } }
+        });
+
+        std::fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+        assert!(apply_camera_blur_to_project_config(&dir, BlurMode::Off));
+        let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(written, original);
+
+        for (blur, mode) in [(BlurMode::Light, "light"), (BlurMode::Heavy, "heavy")] {
+            std::fs::write(&path, serde_json::to_vec(&original).unwrap()).unwrap();
+            assert!(apply_camera_blur_to_project_config(&dir, blur));
+            let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            assert_eq!(
+                written["camera"]["backgroundBlur"],
+                serde_json::json!({ "mode": mode })
+            );
+        }
+
+        let null_picture = serde_json::json!({
+            "camera": { "backgroundBlur": { "mode": "heavy", "picture": null } }
+        });
+        std::fs::write(&path, serde_json::to_vec(&null_picture).unwrap()).unwrap();
+        assert!(apply_camera_blur_to_project_config(&dir, BlurMode::Off));
+        let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(
+            written["camera"]["backgroundBlur"],
+            serde_json::json!({ "mode": "off" })
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

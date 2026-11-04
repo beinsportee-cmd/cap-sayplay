@@ -2504,9 +2504,11 @@ size_label = "Size"
 title = "Camera"
 
 [editor.tabs.camera.blur]
+choose_picture = "Choose Picture…"
 heavy = "Heavy Blur"
 light = "Light Blur"
 off = "Off"
+picture = "Picture"
 remove = "Remove Background"
 
 [editor.tabs.camera.shape]

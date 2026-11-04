@@ -43,6 +43,125 @@ async fn read_output(
 
 #[tokio::test]
 #[ignore = "requires a GPU and ONNX Runtime"]
+async fn picture_replaces_the_room_and_reads_the_right_way_when_mirrored() {
+    let instance = wgpu::Instance::default();
+    let adapter = instance.request_adapter(&Default::default()).await.unwrap();
+    let (device, queue) = adapter.request_device(&Default::default()).await.unwrap();
+    let (width, height) = (640, 360);
+    let input = device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let mut pixels = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = if x > width / 2 {
+                [255, 0, 0, 255]
+            } else {
+                let value = if (x / 12 + y / 12) % 2 == 0 { 255 } else { 0 };
+                [0, value, value, 255]
+            };
+            pixels.extend_from_slice(&pixel);
+        }
+    }
+    queue.write_texture(
+        input.as_image_copy(),
+        &pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        input.size(),
+    );
+    let mut processor = BlurProcessor::new(&device, wgpu::TextureFormat::Rgba8Unorm).unwrap();
+    processor.ensure_textures(&device, width, height);
+    processor.set_frame_synchronous(true);
+    processor.inference_requested = false;
+    processor.mask_initialized = true;
+    processor.mask_dimensions = (SEGMENTATION_SIZE, SEGMENTATION_SIZE);
+    processor.mask_bytes = (0..SEGMENTATION_SIZE * SEGMENTATION_SIZE)
+        .map(|index| {
+            if index % SEGMENTATION_SIZE > SEGMENTATION_SIZE / 2 {
+                255
+            } else {
+                0
+            }
+        })
+        .collect();
+    processor.mask_dirty = true;
+
+    // Same shape as the frame: green on its left half, blue on its right.
+    let (picture_width, picture_height) = (64, 36);
+    let mut picture_pixels = Vec::new();
+    for _ in 0..picture_height {
+        for x in 0..picture_width {
+            picture_pixels.extend_from_slice(if x < picture_width / 2 {
+                &[0, 255, 0, 255]
+            } else {
+                &[0, 0, 255, 255]
+            });
+        }
+    }
+    let picture =
+        Arc::new(BackgroundPicture::new(picture_pixels, picture_width, picture_height).unwrap());
+    let person = ((height / 2 * width + width * 3 / 4) * 4) as usize;
+    let room = |x: u32, y: u32| ((y * width + x) * 4) as usize;
+    let near = |actual: &[u8], expected: [u8; 4]| {
+        actual
+            .iter()
+            .zip(expected)
+            .all(|(&a, e)| a.abs_diff(e) <= 2)
+    };
+
+    for (mirrored, expected) in [(false, [0, 255, 0, 255]), (true, [0, 0, 255, 255])] {
+        processor.set_background_picture(&device, &queue, Some(&picture), mirrored);
+        for mode in [BlurMode::Light, BlurMode::Heavy] {
+            let output = processor.process(&device, &queue, &input, mode);
+            let actual = read_output(&device, &queue, output).await;
+            assert_eq!(&actual[person..person + 4], &[255, 0, 0, 255], "{mode:?}");
+            for (x, y) in [
+                (width / 8, 40),
+                (width / 4, height / 2),
+                (width / 3, height - 40),
+            ] {
+                let index = room(x, y);
+                assert!(
+                    near(&actual[index..index + 4], expected),
+                    "{mode:?} mirrored {mirrored} at {x},{y}: {:?}",
+                    &actual[index..index + 4]
+                );
+            }
+        }
+    }
+
+    let output = processor.process(&device, &queue, &input, BlurMode::Remove);
+    let actual = read_output(&device, &queue, output).await;
+    let index = room(width / 4, height / 2);
+    assert_eq!(actual[index + 3], 0, "Remove ignores the picture");
+
+    processor.set_background_picture(&device, &queue, None, false);
+    let output = processor.process(&device, &queue, &input, BlurMode::Light);
+    let actual = read_output(&device, &queue, output).await;
+    let pixel = &actual[index..index + 4];
+    assert!(
+        pixel[0] <= 2 && pixel[1].abs_diff(pixel[2]) <= 2,
+        "without a picture the room is blurred again: {pixel:?}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a GPU and ONNX Runtime"]
 async fn effects_preserve_foreground_alpha_and_suppress_background_detail() {
     let instance = wgpu::Instance::default();
     let adapter = instance.request_adapter(&Default::default()).await.unwrap();

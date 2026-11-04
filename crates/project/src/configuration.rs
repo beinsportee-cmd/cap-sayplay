@@ -439,10 +439,32 @@ pub enum BackgroundBlurMode {
     Remove,
 }
 
+/// A picture shown behind the person in place of the blurred room. Shaped
+/// like a background source (`{"type": "image", "path": ...}`) so project
+/// files carry and remap it the way they do background pictures.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum CameraBackgroundPicture {
+    Image { path: String },
+    Wallpaper { path: String },
+}
+
+impl CameraBackgroundPicture {
+    pub fn path(&self) -> &str {
+        match self {
+            Self::Image { path } | Self::Wallpaper { path } => path,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct BackgroundBlurConfig {
     pub mode: BackgroundBlurMode,
+    /// Used only while `mode` blurs (`Light` or `Heavy`), so an app that does
+    /// not know this field shows the blur instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub picture: Option<CameraBackgroundPicture>,
 }
 
 impl BackgroundBlurConfig {
@@ -456,12 +478,22 @@ impl BackgroundBlurConfig {
             BackgroundBlurMode::Light | BackgroundBlurMode::Heavy
         ) || self.removes_background()
     }
+
+    pub fn active_picture(&self) -> Option<&CameraBackgroundPicture> {
+        self.picture.as_ref().filter(|_| {
+            matches!(
+                self.mode,
+                BackgroundBlurMode::Light | BackgroundBlurMode::Heavy
+            )
+        })
+    }
 }
 
 impl Default for BackgroundBlurConfig {
     fn default() -> Self {
         Self {
             mode: BackgroundBlurMode::Off,
+            picture: None,
         }
     }
 }
@@ -3305,6 +3337,57 @@ mod tests {
         assert_eq!(
             round_trip.background_blur.is_active(),
             cfg!(target_os = "macos")
+        );
+    }
+
+    #[test]
+    fn camera_background_picture_round_trips_and_only_shows_while_blurring() {
+        let camera: Camera = serde_json::from_value(serde_json::json!({
+            "backgroundBlur": {
+                "mode": "heavy",
+                "picture": { "type": "image", "path": "C:\\Pictures\\class.jpg" }
+            }
+        }))
+        .unwrap();
+        let json = serde_json::to_value(&camera).unwrap();
+        assert_eq!(
+            json["backgroundBlur"],
+            serde_json::json!({
+                "mode": "heavy",
+                "picture": { "type": "image", "path": "C:\\Pictures\\class.jpg" }
+            })
+        );
+        let round_trip: Camera = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            round_trip
+                .background_blur
+                .active_picture()
+                .map(|picture| picture.path()),
+            Some("C:\\Pictures\\class.jpg")
+        );
+
+        let mut blur = round_trip.background_blur.clone();
+        for mode in [BackgroundBlurMode::Off, BackgroundBlurMode::Remove] {
+            blur.mode = mode;
+            assert!(blur.active_picture().is_none());
+        }
+        blur.mode = BackgroundBlurMode::Light;
+        assert!(blur.active_picture().is_some());
+
+        let wallpaper: BackgroundBlurConfig = serde_json::from_value(serde_json::json!({
+            "mode": "light",
+            "picture": { "type": "wallpaper", "path": "/a/assets/backgrounds/macOS/ventura.jpg" }
+        }))
+        .unwrap();
+        assert!(matches!(
+            wallpaper.active_picture(),
+            Some(CameraBackgroundPicture::Wallpaper { .. })
+        ));
+
+        let plain = serde_json::to_value(Camera::default()).unwrap();
+        assert_eq!(
+            plain["backgroundBlur"],
+            serde_json::json!({ "mode": "off" })
         );
     }
 

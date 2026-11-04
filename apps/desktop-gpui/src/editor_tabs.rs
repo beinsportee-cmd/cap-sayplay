@@ -22,10 +22,11 @@ use std::{
 #[cfg(test)]
 use cap_project::CaptionsData;
 use cap_project::{
-    BackgroundBlurConfig, BackgroundBlurMode, CameraShape, CameraXPosition, CameraYPosition,
-    CaptionSegment, CaptionSettings, CornerStyle, CursorAnimationStyle, CursorRippleConfig,
-    KeyboardData, KeyboardSettings, ProjectConfiguration, RecordingMeta, ShadowConfiguration,
-    StereoMode, transcription_ranges_cover, transcription_source_ranges,
+    BackgroundBlurConfig, BackgroundBlurMode, CameraBackgroundPicture, CameraShape,
+    CameraXPosition, CameraYPosition, CaptionSegment, CaptionSettings, CornerStyle,
+    CursorAnimationStyle, CursorRippleConfig, KeyboardData, KeyboardSettings, ProjectConfiguration,
+    RecordingMeta, ShadowConfiguration, StereoMode, transcription_ranges_cover,
+    transcription_source_ranges,
 };
 use gpui::{
     AnyElement, Bounds, Context, EntityId, FontWeight, Hsla, InteractiveElement, IntoElement,
@@ -72,6 +73,23 @@ pub const CAMERA_BLUR_MODES: &[(BackgroundBlurMode, Label)] = &[
         tr::editor::tabs::camera::blur::remove,
     ),
 ];
+
+/// The camera background with `path` behind the person. The picture is drawn
+/// over a blur, and a light blur stays light so apps that cannot show the
+/// picture blur the same way the editor did before it was chosen.
+pub(crate) fn with_camera_picture(
+    blur: &BackgroundBlurConfig,
+    path: String,
+) -> BackgroundBlurConfig {
+    let mode = match blur.mode {
+        BackgroundBlurMode::Light => BackgroundBlurMode::Light,
+        _ => BackgroundBlurMode::Heavy,
+    };
+    BackgroundBlurConfig {
+        mode,
+        picture: Some(CameraBackgroundPicture::Image { path }),
+    }
+}
 
 /// `CORNER_STYLE_OPTIONS` (`:399-402`).
 pub const CORNER_STYLES: [(CornerStyle, Label); 2] = [
@@ -784,12 +802,18 @@ impl EditorWindow {
                     ui::MenuItem::new(label(), *style == project.background.rounding_type)
                 })
                 .collect(),
-            SidebarMenu::CameraBlur => CAMERA_BLUR_MODES
-                .iter()
-                .map(|(mode, label)| {
-                    ui::MenuItem::new(label(), *mode == project.camera.background_blur.mode)
-                })
-                .collect(),
+            SidebarMenu::CameraBlur => {
+                let blur = &project.camera.background_blur;
+                let picture = blur.active_picture().is_some();
+                CAMERA_BLUR_MODES
+                    .iter()
+                    .map(|(mode, label)| ui::MenuItem::new(label(), !picture && *mode == blur.mode))
+                    .chain([ui::MenuItem::new(
+                        tr::editor::tabs::camera::blur::choose_picture(),
+                        picture,
+                    )])
+                    .collect()
+            }
             SidebarMenu::CameraShape => CAMERA_SHAPES
                 .iter()
                 .map(|(shape, label)| {
@@ -967,15 +991,24 @@ impl EditorWindow {
                 });
             }
             SidebarMenu::CameraBlur => {
+                if index == CAMERA_BLUR_MODES.len() {
+                    self.pick_camera_picture(window, cx);
+                    cx.notify();
+                    return;
+                }
                 let Some((mode, _)) = CAMERA_BLUR_MODES.get(index) else {
                     return;
                 };
                 let mode = *mode;
                 self.edit_project("camera-blur", window, cx, move |project| {
-                    if project.camera.background_blur.mode == mode {
+                    let blur = &project.camera.background_blur;
+                    if blur.mode == mode && blur.picture.is_none() {
                         return false;
                     }
-                    project.camera.background_blur = BackgroundBlurConfig { mode };
+                    project.camera.background_blur = BackgroundBlurConfig {
+                        mode,
+                        picture: None,
+                    };
                     true
                 });
             }
@@ -1450,10 +1483,14 @@ impl EditorWindow {
             .map_or(tr::editor::tabs::camera::shape::square(), |(_, label)| {
                 label()
             });
-        let blur_label = CAMERA_BLUR_MODES
-            .iter()
-            .find(|(mode, _)| *mode == camera.background_blur.mode)
-            .map_or(tr::editor::tabs::camera::blur::off(), |(_, label)| label());
+        let blur_label = if camera.background_blur.active_picture().is_some() {
+            tr::editor::tabs::camera::blur::picture()
+        } else {
+            CAMERA_BLUR_MODES
+                .iter()
+                .find(|(mode, _)| *mode == camera.background_blur.mode)
+                .map_or(tr::editor::tabs::camera::blur::off(), |(_, label)| label())
+        };
         let corner_label = CORNER_STYLES
             .iter()
             .find(|(style, _)| *style == camera.rounding_type)
@@ -3962,6 +3999,26 @@ mod tests {
         // Every named style in the picker has a preset behind it.
         for (style, ..) in CURSOR_STYLES {
             assert!(style.preset().is_some(), "{style:?} has no preset");
+        }
+    }
+
+    #[test]
+    fn a_camera_picture_keeps_a_light_blur_and_otherwise_blurs_heavily() {
+        let picture = |path: &str| Some(CameraBackgroundPicture::Image { path: path.into() });
+        for (from, to) in [
+            (BackgroundBlurMode::Off, BackgroundBlurMode::Heavy),
+            (BackgroundBlurMode::Light, BackgroundBlurMode::Light),
+            (BackgroundBlurMode::Heavy, BackgroundBlurMode::Heavy),
+            (BackgroundBlurMode::Remove, BackgroundBlurMode::Heavy),
+        ] {
+            let before = BackgroundBlurConfig {
+                mode: from,
+                picture: picture("old.png"),
+            };
+            let after = with_camera_picture(&before, "new.png".into());
+            assert_eq!(after.mode, to);
+            assert_eq!(after.picture, picture("new.png"));
+            assert_eq!(after.active_picture(), after.picture.as_ref());
         }
     }
 

@@ -3,6 +3,7 @@ mod blur_pipeline;
 mod gpu_tests;
 mod mask_refinement;
 mod matte;
+mod picture;
 mod segmentation;
 #[cfg(target_os = "macos")]
 mod vision;
@@ -16,6 +17,8 @@ use mask_refinement::MaskRefiner;
 #[cfg(test)]
 use mask_refinement::smooth_mask_value;
 use matte::{MattePipeline, MatteTextures};
+pub use picture::{BackgroundPicture, MAX_PICTURE_DIMENSION};
+use picture::{PicturePassInputs, PicturePipeline, PictureTexture};
 use segmentation::SegmentationModel;
 
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
@@ -405,6 +408,10 @@ pub struct BlurProcessor {
     frame_synchronous: bool,
     frame_time: Option<f32>,
     output_format: wgpu::TextureFormat,
+    picture: Option<PictureTexture>,
+    picture_mirrored: bool,
+    picture_pipeline: Option<PicturePipeline>,
+    picture_pipeline_failed: bool,
     // Keep last: must drop after every other field (see BlurSessionHandle).
     _blur_session: BlurSessionHandle,
 }
@@ -562,8 +569,50 @@ impl BlurProcessor {
             frame_synchronous: false,
             frame_time: None,
             output_format,
+            picture: None,
+            picture_mirrored: false,
+            picture_pipeline: None,
+            picture_pipeline_failed: false,
             _blur_session: blur_session,
         })
+    }
+
+    /// Shows `picture` behind the person in `Light` and `Heavy` mode instead
+    /// of the blurred room; `None` goes back to the blur. `mirrored` is
+    /// whether the frame is mirrored after this processor. A picture this
+    /// device cannot take keeps the blur.
+    pub fn set_background_picture(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        picture: Option<&Arc<BackgroundPicture>>,
+        mirrored: bool,
+    ) {
+        self.picture_mirrored = mirrored;
+        let Some(picture) = picture else {
+            self.picture = None;
+            return;
+        };
+        if self
+            .picture
+            .as_ref()
+            .is_some_and(|current| current.is(picture))
+        {
+            return;
+        }
+        self.picture = None;
+        if self.picture_pipeline.is_none() && !self.picture_pipeline_failed {
+            match PicturePipeline::new(device, self.output_format) {
+                Ok(pipeline) => self.picture_pipeline = Some(pipeline),
+                Err(error) => {
+                    tracing::warn!("camera background picture unavailable: {error:#}");
+                    self.picture_pipeline_failed = true;
+                }
+            }
+        }
+        if self.picture_pipeline.is_some() {
+            self.picture = PictureTexture::upload(device, queue, picture.clone());
+        }
     }
 
     pub fn set_frame_synchronous(&mut self, synchronous: bool) {
@@ -715,10 +764,17 @@ impl BlurProcessor {
                 output: &textures.background_view,
             },
         );
-        // Remove uses the lightly blurred room as the local background
-        // estimate it unmixes edge colours against.
+        let picture = match (&self.picture_pipeline, self.picture.as_mut()) {
+            (Some(pipeline), Some(picture)) if mode != BlurMode::Remove => {
+                Some((pipeline, picture))
+            }
+            _ => None,
+        };
+        // Remove and the picture use the lightly blurred room as the local
+        // background estimate they unmix edge colours against.
         let (intensity, passes) = match mode {
             BlurMode::Light | BlurMode::Remove => (1.5, 1),
+            BlurMode::Heavy if picture.is_some() => (1.5, 1),
             BlurMode::Heavy => (2.5, 3),
         };
         for pass in 0..passes {
@@ -739,18 +795,34 @@ impl BlurProcessor {
                 },
             );
         }
-        self.composite_pipeline.composite(
-            device,
-            encoder,
-            CompositePassInputs {
-                sharp: &input_view,
-                blurred: &textures.blurred_view,
-                mask: &textures.mask_view,
-                matte,
-                output: &textures.output_view,
-            },
-            mode == BlurMode::Remove,
-        );
+        if let Some((pipeline, picture)) = picture {
+            picture.prepare(device, (width, height), self.picture_mirrored);
+            pipeline.draw(
+                device,
+                encoder,
+                picture,
+                PicturePassInputs {
+                    sharp: &input_view,
+                    room: &textures.blurred_view,
+                    mask: &textures.mask_view,
+                    matte,
+                    output: &textures.output_view,
+                },
+            );
+        } else {
+            self.composite_pipeline.composite(
+                device,
+                encoder,
+                CompositePassInputs {
+                    sharp: &input_view,
+                    blurred: &textures.blurred_view,
+                    mask: &textures.mask_view,
+                    matte,
+                    output: &textures.output_view,
+                },
+                mode == BlurMode::Remove,
+            );
+        }
         self.output_sequence = self.output_sequence.wrapping_add(1);
         self.last_output_status = Some(BlurOutputStatus {
             mode,

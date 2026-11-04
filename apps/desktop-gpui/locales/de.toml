@@ -2502,9 +2502,11 @@ size_label = "Größe"
 title = "Kamera"
 
 [editor.tabs.camera.blur]
+choose_picture = "Bild auswählen…"
 heavy = "Starke Unschärfe"
 light = "Leichte Unschärfe"
 off = "Aus"
+picture = "Bild"
 remove = "Hintergrund entfernen"
 
 [editor.tabs.camera.shape]

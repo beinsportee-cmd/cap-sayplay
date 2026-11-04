@@ -31,7 +31,7 @@ pub fn clean_background_path(path: &str) -> Option<String> {
         .then_some(clean_path)
 }
 
-fn decode_background_rgba(
+pub(crate) fn decode_background_rgba(
     path: &str,
     max_dimension: u32,
 ) -> Result<(Vec<u8>, u32, u32), image::ImageError> {

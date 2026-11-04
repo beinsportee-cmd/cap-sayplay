@@ -2502,9 +2502,11 @@ size_label = "Taille"
 title = "Caméra"
 
 [editor.tabs.camera.blur]
+choose_picture = "Choisir une image…"
 heavy = "Flou intense"
 light = "Flou léger"
 off = "Désactivé"
+picture = "Image"
 remove = "Supprimer l'arrière-plan"
 
 [editor.tabs.camera.shape]

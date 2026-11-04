@@ -2502,9 +2502,11 @@ size_label = "आकार"
 title = "कैमरा"
 
 [editor.tabs.camera.blur]
+choose_picture = "तस्वीर चुनें…"
 heavy = "ज़्यादा ब्लर"
 light = "हल्का ब्लर"
 off = "बंद"
+picture = "तस्वीर"
 remove = "बैकग्राउंड हटाएँ"
 
 [editor.tabs.camera.shape]

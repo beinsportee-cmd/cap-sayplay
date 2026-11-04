@@ -2502,9 +2502,11 @@ size_label = "サイズ"
 title = "カメラ"
 
 [editor.tabs.camera.blur]
+choose_picture = "画像を選択…"
 heavy = "強いぼかし"
 light = "弱いぼかし"
 off = "オフ"
+picture = "画像"
 remove = "背景を削除"
 
 [editor.tabs.camera.shape]

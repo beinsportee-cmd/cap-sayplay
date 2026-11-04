@@ -681,6 +681,65 @@ mod tests {
     }
 
     #[test]
+    fn a_camera_background_picture_travels_with_the_project() {
+        let root = temp_dir();
+        let picture = root.path().join("camera-bg-1-classroom.jpg");
+        std::fs::write(&picture, b"jpg").unwrap();
+        let sender_wallpaper =
+            "C:/Program Files/SayPlay Recorder/assets/backgrounds/macOS/sequoia-dark.jpg";
+        let camera_picture = |picture: Value| {
+            let blur = serde_json::json!({ "mode": "heavy", "picture": picture });
+            serde_json::json!({ "backgroundBlur": blur })
+        };
+        let config = serde_json::json!({
+            "camera": camera_picture(
+                serde_json::json!({ "type": "image", "path": picture.to_string_lossy() })
+            ),
+            "timeline": { "styleSegments": [
+                { "overrides": { "camera": camera_picture(
+                    serde_json::json!({ "type": "wallpaper", "path": sender_wallpaper })
+                ) } }
+            ] }
+        });
+        let project = make_project(root.path(), META, &config.to_string());
+        let file = root.path().join("Lesson.sayplay");
+        let bundled = |path: &str| path.contains("macOS/sequoia-dark");
+        write_project_file(&project, &file, &new_share_id(), &bundled).unwrap();
+        assert!(
+            archive_names(&file).contains(&"shared-assets/0-camera-bg-1-classroom.jpg".to_string())
+        );
+
+        let library = root.path().join("library");
+        let local = |path: &str| {
+            path.contains("macOS/sequoia-dark")
+                .then(|| "D:/SayPlay/assets/backgrounds/macOS/sequoia-dark.jpg".to_string())
+        };
+        let unpacked = unpack_project_file(&file, &library, &[], &local).unwrap();
+        let asset = unpacked
+            .path
+            .join(ASSETS_DIR)
+            .join("0-camera-bg-1-classroom.jpg");
+        assert_eq!(std::fs::read(&asset).unwrap(), b"jpg");
+
+        let raw: Value =
+            serde_json::from_slice(&std::fs::read(unpacked.path.join(CONFIG_FILE)).unwrap())
+                .unwrap();
+        let blur: cap_project::BackgroundBlurConfig =
+            serde_json::from_value(raw["camera"]["backgroundBlur"].clone()).unwrap();
+        assert_eq!(
+            blur.active_picture(),
+            Some(&cap_project::CameraBackgroundPicture::Image {
+                path: asset.to_string_lossy().into_owned()
+            })
+        );
+        assert_eq!(
+            raw["timeline"]["styleSegments"][0]["overrides"]["camera"]["backgroundBlur"]["picture"]
+                ["path"],
+            "D:/SayPlay/assets/backgrounds/macOS/sequoia-dark.jpg"
+        );
+    }
+
+    #[test]
     fn recordings_that_cannot_be_edited_are_refused() {
         let root = temp_dir();
         let in_progress = META.replace("Complete", "InProgress");

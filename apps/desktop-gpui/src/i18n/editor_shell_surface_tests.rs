@@ -396,9 +396,14 @@ fn editor_shell_surfaces_match_the_literals_they_replaced() {
             "Advanced shadow settings",
         ),
         (tr::editor::tabs::camera::background(), "Background"),
+        (
+            tr::editor::tabs::camera::blur::choose_picture(),
+            "Choose Picture…",
+        ),
         (tr::editor::tabs::camera::blur::heavy(), "Heavy Blur"),
         (tr::editor::tabs::camera::blur::light(), "Light Blur"),
         (tr::editor::tabs::camera::blur::off(), "Off"),
+        (tr::editor::tabs::camera::blur::picture(), "Picture"),
         (
             tr::editor::tabs::camera::blur::remove(),
             "Remove Background",
