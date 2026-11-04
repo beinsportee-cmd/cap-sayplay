@@ -16,6 +16,15 @@ pub(super) fn is_editor_shell_surface_key(key: &str) -> bool {
     .any(|prefix| key.starts_with(prefix))
 }
 
+/// `literal` as the build ships it: SayPlay builds rename the product.
+fn shipped(literal: &str) -> String {
+    if cfg!(sayplay_build) {
+        cap_i18n_build::rebrand(literal)
+    } else {
+        literal.to_owned()
+    }
+}
+
 const FORMATTED: &[&str] = &[
     "editor.window.clip_menu.transition_seconds",
     "editor.clips.append_error",
@@ -1181,7 +1190,7 @@ fn editor_shell_surfaces_match_the_literals_they_replaced() {
         (tr::ui::selection::select_all(), "Select all"),
     ];
     for (translated, literal) in pairs {
-        assert_eq!(translated, literal);
+        assert_eq!(translated, shipped(literal));
     }
     let plain_keys = KEYS
         .iter()
@@ -1289,7 +1298,7 @@ fn editor_shell_messages_format_like_the_code_they_replaced() {
     );
     assert_eq!(
         tr::editor::clips::error::source_failed(&error),
-        format!("Source Cap project failed: {error}")
+        shipped(&format!("Source Cap project failed: {error}"))
     );
     assert_eq!(
         tr::editor::clips::error::unsupported_video(path.display()),

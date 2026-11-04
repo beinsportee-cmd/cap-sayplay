@@ -205,6 +205,9 @@ tokio = { version = "1", features = [
 # audio markers for the fake transcriber.
 cap-verify = { path = "../../crates/verify" }
 tempfile = "3"
+# The shell surface tests compare against the English literals as SayPlay
+# builds ship them.
+cap-i18n-build = { path = "i18n-build" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
