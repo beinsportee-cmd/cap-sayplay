@@ -1,3 +1,3 @@
-NSCameraUsageDescription = "Cap usa tu cámara para grabarte en tus Caps.";
-NSMicrophoneUsageDescription = "Cap usa tu micrófono para grabarte en tus Caps.";
-NSScreenCaptureUsageDescription = "Cap graba tu pantalla para crear tus Caps.";
+NSCameraUsageDescription = "SayPlay Recorder usa tu cámara para mostrarte en tus grabaciones.";
+NSMicrophoneUsageDescription = "SayPlay Recorder usa tu micrófono para grabar tu voz.";
+NSScreenCaptureUsageDescription = "SayPlay Recorder graba tu pantalla para crear tus grabaciones.";

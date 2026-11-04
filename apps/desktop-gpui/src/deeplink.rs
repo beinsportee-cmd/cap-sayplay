@@ -274,6 +274,11 @@ fn submit_action_url(raw: &str) {
         tracing::debug!("deep link is not a URL; ignored");
         return;
     };
+    #[cfg(target_os = "macos")]
+    if let Some(path) = shared_project_file(&url) {
+        submit_project_file(path);
+        return;
+    }
     match DeepLinkAction::try_from(&url) {
         Ok(action) => submit_action(action),
         Err(ActionParseFromUrlError::ParseFailed(message)) => {
@@ -294,6 +299,17 @@ fn submit_action_url(raw: &str) {
         // Likely login action, not handled here -- the auth slot got it.
         Err(ActionParseFromUrlError::NotAction) => {}
     }
+}
+
+/// A `.sayplay` file Finder opened with the app. It arrives as a `file://`
+/// URL, which [`DeepLinkAction`] would otherwise read as a `.cap` folder.
+#[cfg(any(test, target_os = "macos"))]
+fn shared_project_file(url: &Url) -> Option<PathBuf> {
+    if url.scheme() != "file" {
+        return None;
+    }
+    let path = url.to_file_path().ok()?;
+    crate::project_file::project_file_argument(path.to_str()?)
 }
 
 /// Wire the executor: scan the initial launch argv for action URLs, then
@@ -1091,5 +1107,24 @@ mod tests {
             DeepLinkAction::try_from(&url),
             Err(ActionParseFromUrlError::Invalid)
         );
+    }
+
+    #[test]
+    fn a_sayplay_file_from_finder_opens_as_a_shared_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Lesson 3.sayplay");
+        std::fs::write(&file, b"zip").unwrap();
+        let url = |path: &std::path::Path| Url::from_file_path(path).unwrap();
+
+        assert_eq!(shared_project_file(&url(&file)), Some(file.clone()));
+        assert_eq!(
+            shared_project_file(&url(&dir.path().join("Gone.sayplay"))),
+            None
+        );
+        let project = dir.path().join("Lesson 3.cap");
+        std::fs::create_dir(&project).unwrap();
+        assert_eq!(shared_project_file(&url(&project)), None);
+        let link = Url::parse("cap-desktop://action?value=%22stop_recording%22").unwrap();
+        assert_eq!(shared_project_file(&link), None);
     }
 }

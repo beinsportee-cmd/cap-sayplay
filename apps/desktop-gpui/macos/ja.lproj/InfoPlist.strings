@@ -1,3 +1,3 @@
-NSCameraUsageDescription = "CapはCapsであなたを録画するためにカメラを使用します。";
-NSMicrophoneUsageDescription = "CapはCapsであなたの声を録音するためにマイクを使用します。";
-NSScreenCaptureUsageDescription = "CapはCapsを作成するために画面を録画します。";
+NSCameraUsageDescription = "SayPlay Recorderは録画にあなたを映すためにカメラを使用します。";
+NSMicrophoneUsageDescription = "SayPlay Recorderはあなたの声を録音するためにマイクを使用します。";
+NSScreenCaptureUsageDescription = "SayPlay Recorderは録画を作成するために画面を録画します。";

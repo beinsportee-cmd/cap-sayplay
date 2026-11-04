@@ -120,4 +120,5 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/target/ffmpeg/bin:$PATH"
           CARGO_TERM_COLOR=never cargo +1.95.0 test --release --target x86_64-pc-windows-msvc -p cap-desktop-gpui --bin cap-gpui -- \
             camera_picture camera_background_picture project_file:: editor_shell_surface \
-            the_catalogues_match_the_source indexed_sidebar_menu apply_camera_preview
+            the_catalogues_match_the_source indexed_sidebar_menu apply_camera_preview \
+            a_sayplay_file_from_finder

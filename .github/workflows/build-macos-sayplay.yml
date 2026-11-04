@@ -1,0 +1,113 @@
+name: build-macos-sayplay
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - sayplay
+      - sayplay-mac
+
+permissions:
+  contents: read
+
+# A newer push to the same branch supersedes an in-flight disk image build.
+concurrency:
+  group: build-macos-sayplay-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SAYPLAY_BUILD: "1"
+  RUST_TARGET_TRIPLE: aarch64-apple-darwin
+  # No Apple Developer ID yet, so everything is signed ad hoc: the app runs
+  # once the user allows it under Privacy & Security.
+  APPLE_SIGNING_IDENTITY: "-"
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          targets: aarch64-apple-darwin
+          components: rustfmt
+
+      - name: Syntax check cap-gpui (SayPlay)
+        shell: bash
+        run: ./scripts/check-sayplay-gpui-compile.sh --syntax-only aarch64-apple-darwin
+
+      - uses: ./.github/actions/setup-rust-cache
+        with:
+          target: aarch64-apple-darwin
+          prefix-key: v1-sayplay-macos
+          save-cache: true
+          cache-on-failure: true
+          workspaces: |
+            . -> target
+            apps/desktop-gpui -> target
+
+      - uses: ./.github/actions/setup-js
+
+      - name: Create .env file
+        shell: bash
+        run: |
+          version="$(grep '^version = ' apps/desktop-gpui/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')"
+          {
+            echo "appVersion=${version}"
+            echo "VITE_ENVIRONMENT=production"
+            echo "NEXT_PUBLIC_WEB_URL=https://cap.so"
+            echo "NEXTAUTH_URL=https://cap.so"
+            echo "VITE_OPENPANEL_CLIENT_ID="
+            echo "VITE_OPENPANEL_API_URL="
+            echo "VITE_SERVER_URL=https://cap.so"
+            echo "RUST_TARGET_TRIPLE=aarch64-apple-darwin"
+          } > .env
+
+      - name: Run cap-setup
+        shell: bash
+        run: bun run cap-setup
+
+      - name: Typecheck cap-gpui (SayPlay)
+        shell: bash
+        run: ./scripts/check-sayplay-gpui-compile.sh aarch64-apple-darwin
+
+      - name: Compile cap-gpui release
+        shell: bash
+        run: ./scripts/build-gpui-binary.sh release aarch64-apple-darwin
+
+      - name: Build desktop binaries
+        shell: bash
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: "0"
+          CARGO_PROFILE_RELEASE_STRIP: symbols
+        run: ./scripts/build-desktop-binaries.sh aarch64-apple-darwin
+
+      - name: Build app and disk image
+        shell: bash
+        run: node scripts/bundle-gpui.mjs aarch64-apple-darwin --bundles app,dmg --skip-build
+
+      - name: Verify app contents and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle=apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle
+          app="$bundle/macos/SayPlay Recorder.app"
+          plist="$app/Contents/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = com.sayandplayschool.recorder
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = "SayPlay Recorder"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDocumentTypes' "$plist" | grep -q sayplay
+          for binary in "SayPlay Recorder" cap-muxer cap-cli; do
+            test -x "$app/Contents/MacOS/$binary"
+          done
+          codesign --verify --deep --strict "$app"
+          ls -l "$bundle"/dmg/*.dmg
+
+      - name: Upload disk image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sayplay-recorder-macos-arm64
+          path: apps/desktop-gpui/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error

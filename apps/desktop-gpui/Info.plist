@@ -32,13 +32,56 @@
 			<key>LSTypeIsPackage</key>
 			<true/>
 		</dict>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>sayplay</string>
+			</array>
+			<key>CFBundleTypeIconFile</key>
+			<string>icon.icns</string>
+			<key>CFBundleTypeName</key>
+			<string>SayPlay Project</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.sayandplayschool.recorder.project</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.sayandplayschool.recorder.project</string>
+			<key>UTTypeDescription</key>
+			<string>SayPlay Project</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeIconFile</key>
+			<string>icon.icns</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>sayplay</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/x-sayplay-project</string>
+			</dict>
+		</dict>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Cap uses your camera to record you in your Caps</string>
+	<string>SayPlay Recorder uses your camera to show you in your recordings.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Cap uses your microphone to record you in your Caps</string>
+	<string>SayPlay Recorder uses your microphone to record your voice.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Cap captures your screen as part of recording your Caps</string>
+	<string>SayPlay Recorder records your screen as part of your recordings.</string>
 	<key>NSCameraUseContinuityCameraDeviceType</key>
 	<true/>
 </dict>
