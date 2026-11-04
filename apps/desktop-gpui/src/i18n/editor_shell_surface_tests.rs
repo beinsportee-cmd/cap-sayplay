@@ -1190,7 +1190,7 @@ fn editor_shell_surfaces_match_the_literals_they_replaced() {
         (tr::ui::selection::select_all(), "Select all"),
     ];
     for (translated, literal) in pairs {
-        assert_eq!(translated, shipped(literal));
+        assert_eq!(*translated, shipped(literal));
     }
     let plain_keys = KEYS
         .iter()
