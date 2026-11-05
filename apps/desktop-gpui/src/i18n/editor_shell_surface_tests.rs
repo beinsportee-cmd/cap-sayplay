@@ -50,6 +50,7 @@ const FORMATTED: &[&str] = &[
     "editor.export.estimate.seconds_range",
     "editor.export.fps",
     "editor.export.frames",
+    "editor.export.separate_audio.failed",
     "editor.export.stats.output_value",
     "editor.tabs.captions.download",
     "editor.tabs.captions.downloading",
@@ -322,6 +323,26 @@ fn editor_shell_surfaces_match_the_literals_they_replaced() {
         (tr::editor::export::section::frame_rate(), "Frame rate"),
         (tr::editor::export::section::quality(), "Quality"),
         (tr::editor::export::section::resolution(), "Resolution"),
+        (
+            tr::editor::export::separate_audio::description(),
+            "Also saves the microphone and the system audio as their own .m4a files next to the video. Takes longer.",
+        ),
+        (
+            tr::editor::export::separate_audio::failed_title(),
+            "Audio files not saved",
+        ),
+        (
+            tr::editor::export::separate_audio::microphone_file(),
+            "Microphone",
+        ),
+        (
+            tr::editor::export::separate_audio::system_file(),
+            "System audio",
+        ),
+        (
+            tr::editor::export::separate_audio::title(),
+            "Separate audio files",
+        ),
         (
             tr::editor::export::sign_in_required(),
             "You need to sign in to share recordings",
@@ -1190,7 +1211,7 @@ fn editor_shell_surfaces_match_the_literals_they_replaced() {
         (tr::ui::selection::select_all(), "Select all"),
     ];
     for (translated, literal) in pairs {
-        assert_eq!(translated, shipped(literal));
+        assert_eq!(*translated, shipped(literal));
     }
     let plain_keys = KEYS
         .iter()
@@ -1311,6 +1332,10 @@ fn editor_shell_messages_format_like_the_code_they_replaced() {
     assert_eq!(
         tr::editor::clips::save_before_recording_failed(&error),
         format!("Could not save the current project before recording: {error}")
+    );
+    assert_eq!(
+        tr::editor::export::separate_audio::failed(&error),
+        format!("The video was exported, but the separate audio files could not be saved: {error}")
     );
 
     for (lower, upper) in [(1.5_f64, 2.0_f64), (12.0, 41.0), (0.1, 3.4)] {
